@@ -1,12 +1,6 @@
 const std = @import("std");
 const utils = @import("src/fetchCLib.zig");
 
-pub const GitLib = struct {
-    name: []const u8,
-    url: []const u8,
-    tag: []const u8,
-};
-
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
 // executed by an external runner. The functions in `std.Build` implement a DSL
@@ -91,6 +85,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.addIncludePath(b.path("c_externals/")); //Adding all of the c library headers to the include path
+    exe.addIncludePath(b.path("c_externals/freetype/")); //Have to add freetype separately because it expects some weird file structure to work
     exe.addCSourceFile(.{.file=b.path("c_externals/glad/glad.c")}); //Adding glad.c so it compiles with my code
 
     //Linking against useful C libraries
@@ -101,10 +96,13 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("rt");
     exe.linkSystemLibrary("GL");
     exe.linkSystemLibrary("X11");
+    exe.linkSystemLibrary("z");
 
     //Getting glfw
     utils.fetchMakeAvailableCMake(b, exe, "glfw3", "https://github.com/glfw/glfw.git", "3.4",
         &.{"-DGLFW_BUILD_EXAMPLES=OFF", "-DGLFW_BUILD_TESTS=OFF", "-DGLFW_BUILD_DOCS=OFF", "-DGLFW_INSTALL=OFF"}) catch return;
+
+    utils.fetchMakeAvailableCMake(b, exe, "freetype", "https://gitlab.freedesktop.org/freetype/freetype.git", "VER-2-14-2", &.{}) catch return;
 
     // This declares intent for the executable to be installed into the
     // install prefix when running `zig build` (i.e. when executing the default
