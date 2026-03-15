@@ -12,12 +12,14 @@ pub fn loadShader(fragment_path: []const u8, vertex_path: []const u8, allocator:
         std.debug.print("ERROR::VERTEX_SHADER::FILE NOT SUCCESSFULLY READ", .{});
         return err;
     };
+    defer allocator.free(vert_buf);
 
     //Read the fragment shader into the buffer:
     fu.readToEnd(fragment_path, &frag_buf, allocator) catch |err| {
         std.debug.print("ERROR::FRAGMENT_SHADER::FILE NOT SUCCESSFULLY READ", .{});
         return err;
     };
+    defer allocator.free(frag_buf);
 
     var info_log: [512]u8 = undefined;
 

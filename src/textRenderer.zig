@@ -105,11 +105,6 @@ pub const renderer = struct {
 
         try initialiseCharRendering(face, allocator);
 
-        //Debug print
-        const ch_a = characters.get('A').?;
-        std.debug.print("Char 'A': texID={}, size={}x{}, bearing={}x{}, advance={}\n", 
-            .{ch_a.textureID, ch_a.size.x, ch_a.size.y, ch_a.bearing.x, ch_a.bearing.y, ch_a.advance});
-
         return r;
     }
 

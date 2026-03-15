@@ -60,15 +60,13 @@ fn init(window: *?*glfw.GLFWwindow) bool {
 
     //Loading the font as a FreeType 'face'
     var face: freetype.FT_Face = undefined;
-    if(freetype.FT_New_Face(ft, "data/fonts/DejaVuSans.ttf", 0, @ptrCast(&face)) != 0) {
+    if(freetype.FT_New_Face(ft, "data/fonts/DejaVuSansMono.ttf", 0, @ptrCast(&face)) != 0) {
         std.debug.print("ERROR::FREETYPE: Failed to load font\n", .{});
         return false;
     }
 
     _ = freetype.FT_Set_Pixel_Sizes(face, 0, 48); //Setting the pixel font size we would like to get from the face
 
-    // const tRenderer_ptr = gpa.allocator().alignedAlloc(tr.renderer, std.mem.Alignment.@"32", 1 * @sizeOf(tr.renderer)) catch return false;
-    // tRenderer = @ptrCast(tRenderer_ptr);
     tRenderer = tr.renderer.init("data/shaders/glyph.frag", "data/shaders/glyph.vert", gpa.allocator(), face) catch return false;
 
     //Freeing freetype's resources
@@ -95,9 +93,7 @@ pub fn main() !void {
             glad.glClear(glad.GL_COLOR_BUFFER_BIT);
 
             tRenderer.renderText("This is sample text", 45.0, 45.0, 1.0, .{.x = 0.5, .y = 0.8, .z = 0.2, .w =1.0});
-            checkGLError("98");
             tRenderer.renderText("(C) LearnOpenGL.com", 520.0, 540.0, 1.0, .{.x = 0.3, .y = 0.7, .z = 0.9, .w = 1.0});
-            checkGLError("100");
 
             //check and call events and swap the buffers
             glfw.glfwSwapBuffers(gw);
