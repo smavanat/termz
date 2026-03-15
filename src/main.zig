@@ -1,65 +1,25 @@
 const std = @import("std");
 const termz = @import("termz");
 const builtin = @import("builtin");
-const glfw = @cImport({@cInclude("glfw/glfw3.h");});
-const glad = @cImport({@cInclude("glad/glad.h");});
-const freetype = @cImport({@cInclude("freetype/ft2build.h"); @cInclude("freetype/freetype.h");});
-
-const ivec2 = struct {
-    x: i32,
-    y: i32
-};
-
-const character = struct {
-    textureID: u32,
-    size: ivec2,
-    bearing: ivec2,
-    advance: u32
-};
+const tr = @import("textRenderer.zig");
+const glfw = @import("imports.zig").glfw;
+const glad = @import("imports.zig").glad;
+const freetype = @import("imports.zig").freetype;
+const cglm = @import("imports.zig").cglm;
 
 var gw: ?*glfw.GLFWwindow = null;
-var characters: std.AutoArrayHashMap(u8, character) = undefined;
+var tRenderer: tr.renderer = undefined;
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) callconv(.c) void {
     if(glad.glad_glViewport) |glViewport|{
         glViewport(0, 0, width, height);
+        var proj: cglm.mat4 align(32) = undefined;
+        cglm.glm_ortho(0.0, @floatFromInt(width), @floatFromInt(height), 0.0, -1.0, 1.0, &proj);
+        tRenderer.projection = proj;
     }
 
     _ = window; //To prevent the stupid unused function parameter errors
-}
-
-fn initialiseCharRendering(face: freetype.FT_Face) !void {
-    //Initialising the character map
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    characters = std.AutoArrayHashMap(u8, character).init(gpa.allocator());
-
-    glad.glPixelStorei(glad.GL_UNPACK_ALIGNMENT, 1); //Disable byte-alignment restriction
-
-    for(0..128) |c| {
-        //Load character glyph
-        if(freetype.FT_Load_Char(face, c, freetype.FT_LOAD_RENDER) == 0) {
-            std.debug.print("ERROR::FREETYPE: Failed to load glyph {}", .{c});
-            continue;
-        }
-
-        //Generate texture
-        var texture: u32 = undefined;
-        glad.glGenTextures(1, &texture);
-        glad.glBindTexture(glad.GL_TEXTURE_2D, texture);
-        glad.glTexImage2D(glad.GL_TEXTURE_2D, 0, glad.GL_RED, @intCast(face.*.glyph.*.bitmap.width),
-                          @intCast(face.*.glyph.*.bitmap.rows), 0, glad.GL_RED, glad.GL_UNSIGNED_BYTE, face.*.glyph.*.bitmap.buffer);
-
-        //Set texture options
-        glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_S, glad.GL_CLAMP_TO_EDGE);
-        glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_T, glad.GL_CLAMP_TO_EDGE);
-        glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_MIN_FILTER, glad.GL_LINEAR);
-        glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_MAG_FILTER, glad.GL_LINEAR);
-
-        //Store character for later use
-        const ch: character = .{.textureID = texture, .size = .{.x = @intCast(face.*.glyph.*.bitmap.width), .y = @intCast(face.*.glyph.*.bitmap.rows)},
-                        .bearing = .{.x = face.*.glyph.*.bitmap_left, .y = face.*.glyph.*.bitmap_top}, .advance = @intCast(face.*.glyph.*.advance.x)};
-        _ = try characters.fetchPut(@intCast(c), ch);
-    }
 }
 
 fn init(window: *?*glfw.GLFWwindow) bool {
@@ -100,14 +60,16 @@ fn init(window: *?*glfw.GLFWwindow) bool {
 
     //Loading the font as a FreeType 'face'
     var face: freetype.FT_Face = undefined;
-    if(freetype.FT_New_Face(ft, "../data/fonts/NotoSansCarian-Regular.ttf", 0, &face) != 0) {
+    if(freetype.FT_New_Face(ft, "data/fonts/DejaVuSans.ttf", 0, @ptrCast(&face)) != 0) {
         std.debug.print("ERROR::FREETYPE: Failed to load font\n", .{});
         return false;
     }
 
     _ = freetype.FT_Set_Pixel_Sizes(face, 0, 48); //Setting the pixel font size we would like to get from the face
 
-    initialiseCharRendering(face) catch return false;
+    // const tRenderer_ptr = gpa.allocator().alignedAlloc(tr.renderer, std.mem.Alignment.@"32", 1 * @sizeOf(tr.renderer)) catch return false;
+    // tRenderer = @ptrCast(tRenderer_ptr);
+    tRenderer = tr.renderer.init("data/shaders/glyph.frag", "data/shaders/glyph.vert", gpa.allocator(), face) catch return false;
 
     //Freeing freetype's resources
     _ = freetype.FT_Done_Face(face);
@@ -116,13 +78,26 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     return true;
 }
 
+// Add this helper and call it after renderText:
+fn checkGLError(label: []const u8) void {
+    const err = glad.glGetError();
+    if (err != glad.GL_NO_ERROR) {
+        std.debug.print("GL Error at {s}: {}\n", .{label, err});
+    }
+}
+
 pub fn main() !void {
     if(init(&gw)) {
         std.debug.print("Initialised\n", .{});
         while(glfw.glfwWindowShouldClose(gw) == 0) {
             //Setting the background colour to be black
-            glad.glClearColor(0.0, 0.0, 0.0, 0.0);
+            glad.glClearColor(1.0, 1.0, 1.0, 1.0);
             glad.glClear(glad.GL_COLOR_BUFFER_BIT);
+
+            tRenderer.renderText("This is sample text", 45.0, 45.0, 1.0, .{.x = 0.5, .y = 0.8, .z = 0.2, .w =1.0});
+            checkGLError("98");
+            tRenderer.renderText("(C) LearnOpenGL.com", 520.0, 540.0, 1.0, .{.x = 0.3, .y = 0.7, .z = 0.9, .w = 1.0});
+            checkGLError("100");
 
             //check and call events and swap the buffers
             glfw.glfwSwapBuffers(gw);
@@ -130,6 +105,7 @@ pub fn main() !void {
         }
 
         glfw.glfwTerminate();
+        tRenderer.deinit();
+        _ = gpa.deinit();
     }
-    characters.deinit();
 }
