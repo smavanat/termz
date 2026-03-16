@@ -47,8 +47,8 @@ pub fn fetchMakeAvailableCMake(b: *std.Build, exe: *std.Build.Step.Compile, name
 
     // Link library
     for(dirs) |dir| {
-        std.debug.print("Found library at path {s}\n", .{dir});
         std.fs.cwd().access(dir, .{}) catch continue; //Ignore if the library does not generate this filepath
+        std.debug.print("Found library at path {s}\n", .{dir});
         exe.addLibraryPath(b.path(dir));
     }
 

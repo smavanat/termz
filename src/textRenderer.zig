@@ -3,6 +3,7 @@ const imports = @import("imports.zig");
 
 const s = imports.termz_core.sh;
 const mu = imports.termz_core.mu;
+const tb = imports.termz_core.tb;
 
 const glad = imports.termz_c_externals.glad;
 const freetype = imports.termz_c_externals.freetype;
@@ -15,14 +16,61 @@ const character = struct {
     advance: u32
 };
 
-const render_vertex = struct {
-    pos: mu.vec2,
-    colour: mu.vec4,
-    uv: mu.vec2,
-    tex_index: f32
+const atlas = struct {
+    cols: u32,
+    rows: u32,
+    cell_w: u32,
+    cell_h: u32,
+    textureID: u32,
+    uvs: []mu.vec4,
+    pixels: []u8
 };
 
+//TODO: NEED TO ACTUALLY MAKE THE ATLAS TEXTURE AND RENDER FROM IT IN THE TEXT RENDERER
+
 var characters: std.AutoArrayHashMap(u8, character) = undefined;
+
+fn initialiseCharRendering_new(face: freetype.FT_Face, allocator: std.mem.Allocator, at: *atlas) !void {
+    characters = std.AutoArrayHashMap(u8, character).init(allocator);
+
+    glad.glPixelStorei(glad.GL_UNPACK_ALIGNMENT, 1); //Disable byte-alignment restriction
+    const baseline :u32 = @intCast(face.*.size.*.metrics.ascender >> 6);
+    const atlas_w = at.cell_w * at.cols;
+    const atlas_h = at.cell_h * at.rows;
+
+    for(32..128) |c| {
+        //Load character glyph
+        if(freetype.FT_Load_Char(face, c, freetype.FT_LOAD_RENDER) != 0) {
+            std.debug.print("ERROR::FREETYPE: Failed to load glyph {}\n", .{c});
+            continue;
+        }
+
+        const col = (c - 32) % at.cols;
+        const row = (c - 32) / at.cols;
+
+        //Top left of this cell in the atlas
+        const ox = col * at.cell_w;
+        const oy = row * at.cell_h;
+
+        //Offset the glyph within the cell using bearing so it sits on the baseline
+        const glyph_x = ox + @as(u32, @intCast(face.*.glyph.*.bitmap_left));
+        const glyph_y = oy + baseline - @as(u32, @intCast(face.*.glyph.*.bitmap_top));
+
+        const bmp = face.*.glyph.*.bitmap;
+        for(0..bmp.rows) |y| {
+            for(0..bmp.width) |x| {
+                at.pixels[(glyph_y + y) * atlas_w + (glyph_x + x)] = bmp.buffer[y * bmp.width + x];
+            }
+        }
+
+        at.uvs[c-32] = .{
+            @as(f32, @floatFromInt(ox))             / @as(f32, @floatFromInt(atlas_w)),
+            @as(f32, @floatFromInt(oy))             / @as(f32, @floatFromInt(atlas_h)),
+            @as(f32, @floatFromInt(ox + at.cell_w)) / @as(f32, @floatFromInt(atlas_w)),
+            @as(f32, @floatFromInt(ox + at.cell_h)) / @as(f32, @floatFromInt(atlas_h))
+        };
+    }
+}
 
 fn initialiseCharRendering(face: freetype.FT_Face, allocator: std.mem.Allocator) !void {
     //Initialising the character map
@@ -30,7 +78,7 @@ fn initialiseCharRendering(face: freetype.FT_Face, allocator: std.mem.Allocator)
 
     glad.glPixelStorei(glad.GL_UNPACK_ALIGNMENT, 1); //Disable byte-alignment restriction
 
-    for(0..128) |c| {
+    for(32..128) |c| {
         //Load character glyph
         if(freetype.FT_Load_Char(face, c, freetype.FT_LOAD_RENDER) != 0) {
             std.debug.print("ERROR::FREETYPE: Failed to load glyph {}\n", .{c});
@@ -62,9 +110,11 @@ pub const renderer = struct {
     vbo: u32,
     ebo: u32,
     shader: u32,
+    screen_tex: u32,
     projection: cglm.mat4 align(32),
 
     pub fn init(fragment_path: []const u8, vertex_path: []const u8, allocator: std.mem.Allocator, face: freetype.FT_Face) !renderer {
+        //Generating the buffers
         var vao: c_uint = undefined;
         var vbo: c_uint = undefined;
 
@@ -78,12 +128,20 @@ pub const renderer = struct {
         glad.glBindBuffer(glad.GL_ARRAY_BUFFER, 0);
         glad.glBindVertexArray(0);
 
+        //Generating the texture
+        var tex: c_uint = undefined;
+        glad.glGenTextures(1, &tex);
+        glad.glBindTexture(glad.GL_TEXTURE_2D, tex);
+        glad.glTexImage2D(glad.GL_TEXTURE_2D, 0, glad.GL_RGBA8, 800, 600, 0, glad.GL_RGBA, glad.GL_UNSIGNED_BYTE, null); //Setting it to use rgba colours
+        glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_MIN_FILTER, glad.GL_NEAREST);
+        glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_MAG_FILTER, glad.GL_NEAREST);
+
         const shader = try s.loadShader(fragment_path, vertex_path, allocator);
         glad.glUseProgram(shader);
         const loc = glad.glGetUniformLocation(shader, "text");
         glad.glUniform1i(loc, 0);
 
-        var r = renderer{.vao = vao, .vbo = vbo, .ebo = 0, .shader = shader, .projection = undefined};
+        var r = renderer{.vao = vao, .vbo = vbo, .ebo = 0, .shader = shader, .screen_tex = tex, .projection = undefined};
 
         cglm.glm_ortho(0.0, 800.0, 600.0, 0.0, -1.0, 1.0, &r.projection);
 
@@ -93,6 +151,47 @@ pub const renderer = struct {
         try initialiseCharRendering(face, allocator);
 
         return r;
+    }
+
+    pub fn renderTextBuffer(self: *renderer, tex_buf: tb.text_buffer, at: *atlas) void {
+        s.use(self.shader);
+        glad.glUniform3f(glad.glGetUniformLocation(@intCast(self.shader), "textColor"), tex_buf.foregroundColour.x, tex_buf.foregroundColour.y, tex_buf.backgroundColour.z);
+        glad.glActiveTexture(glad.GL_TEXTURE0);
+        glad.glBindTexture(glad.GL_TEXTURE_2D, self.screen_tex); //Binding our texture
+        glad.glBindVertexArray(self.vao);
+        const proj_loc = glad.glGetUniformLocation(self.shader, "projection");
+        glad.glUniformMatrix4fv(proj_loc, 1, glad.GL_FALSE, @ptrCast(&self.projection));
+
+        var x_cursor_pos = 0;
+        var y_cursor_pos = 0;
+
+        for(tex_buf.screen.items) |line| {
+            x_cursor_pos = 0;
+            for(line.characters.items) |char| {
+                const ch :character = char.char;
+
+                const xpos: f32 = @as(f32, @floatFromInt(x_cursor_pos * at.cell_w));
+                const ypos: f32 = @as(f32, @floatFromInt(y_cursor_pos * at.cell_h));
+                const w: f32 = @as(f32, @floatFromInt(self.cell_w));
+                const h: f32 = @as(f32, @floatFromInt(self.cell_h));
+
+                //Update vbo for each character
+                const uv = at.uvs[ch-32];
+                const vertices = [6][4]f32{
+                    .{xpos,     ypos,     uv[0], uv[1]},
+                    .{xpos,     ypos - h, uv[0], uv[3]},
+                    .{xpos + w, ypos - h, uv[2], uv[3]},
+                    .{xpos,     ypos,     uv[0], uv[1]},
+                    .{xpos + w, ypos - h, uv[2], uv[3]},
+                    .{xpos + w, ypos,     uv[2], uv[1]},
+                };
+
+                glad.glBufferSubData(glad.GL_ARRAY_BUFFER, 0, @sizeOf(@TypeOf(vertices)), @ptrCast(&vertices));
+                glad.glDrawArrays(glad.GL_TRIANGLES, 0, 6);
+                x_cursor_pos += 1;
+            }
+            y_cursor_pos += 1;
+        }
     }
 
     pub fn renderText(self: *renderer, text: []const u8, x: f32, y: f32, scale: f32, colour: mu.vec4) void {
@@ -124,7 +223,7 @@ pub const renderer = struct {
                 [_]f32{xpos + w, ypos,     1.0, 1.0},  // top-right
             };
 
-            //Render glyph textuer over quad
+            //Render glyph texture over quad
             glad.glBindTexture(glad.GL_TEXTURE_2D, @intCast(ch.textureID));
             //Update content of VBO memory
             glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.vbo);
