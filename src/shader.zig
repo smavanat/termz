@@ -1,6 +1,8 @@
 const std = @import("std");
-const fu = @import("fileUtils.zig");
-const glad = @import("imports.zig").glad;
+const imports = @import("imports.zig");
+
+const fu = imports.termz_core.fu;
+const glad = imports.termz_c_externals.glad;
 
 pub fn loadShader(fragment_path: []const u8, vertex_path: []const u8, allocator: std.mem.Allocator) !u32 {
     var frag_buf: []const u8 = undefined;

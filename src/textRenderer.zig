@@ -1,37 +1,24 @@
 const std = @import("std");
-const s = @import("shader.zig");
-const glad = @import("imports.zig").glad;
-const freetype = @import("imports.zig").freetype;
-const cglm = @import("imports.zig").cglm;
+const imports = @import("imports.zig");
 
-const ivec2 = struct {
-    x: i32,
-    y: i32
-};
+const s = imports.termz_core.sh;
+const mu = imports.termz_core.mu;
 
-const vec2 = struct {
-    x: f32,
-    y: f32
-};
-
-const vec4 = struct {
-    x: f32,
-    y: f32,
-    z: f32,
-    w: f32
-};
+const glad = imports.termz_c_externals.glad;
+const freetype = imports.termz_c_externals.freetype;
+const cglm = imports.termz_c_externals.cglm;
 
 const character = struct {
     textureID: u32,
-    size: ivec2,
-    bearing: ivec2,
+    size: mu.ivec2,
+    bearing: mu.ivec2,
     advance: u32
 };
 
 const render_vertex = struct {
-    pos: vec2,
-    colour: vec4,
-    uv: vec2,
+    pos: mu.vec2,
+    colour: mu.vec4,
+    uv: mu.vec2,
     tex_index: f32
 };
 
@@ -108,7 +95,7 @@ pub const renderer = struct {
         return r;
     }
 
-    pub fn renderText(self: *renderer, text: []const u8, x: f32, y: f32, scale: f32, colour: vec4) void {
+    pub fn renderText(self: *renderer, text: []const u8, x: f32, y: f32, scale: f32, colour: mu.vec4) void {
         s.use(self.shader);
         glad.glUniform3f(glad.glGetUniformLocation(@intCast(self.shader), "textColor"), colour.x, colour.y, colour.z);
         glad.glActiveTexture(glad.GL_TEXTURE0);

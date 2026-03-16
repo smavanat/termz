@@ -1,11 +1,14 @@
 const std = @import("std");
 const termz = @import("termz");
 const builtin = @import("builtin");
-const tr = @import("textRenderer.zig");
-const glfw = @import("imports.zig").glfw;
-const glad = @import("imports.zig").glad;
-const freetype = @import("imports.zig").freetype;
-const cglm = @import("imports.zig").cglm;
+const imports = @import("imports.zig");
+
+const tr = imports.termz_core.tr;
+
+const glfw = imports.termz_c_externals.glfw;
+const glad = imports.termz_c_externals.glad;
+const freetype = imports.termz_c_externals.freetype;
+const cglm = imports.termz_c_externals.cglm;
 
 var gw: ?*glfw.GLFWwindow = null;
 var tRenderer: tr.renderer = undefined;
