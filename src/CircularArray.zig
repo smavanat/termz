@@ -49,7 +49,7 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
         pub fn addToFront(self: *CircularArray(T, alignment), val: T, gpa: std.mem.Allocator) !void {
             if(self.size >= self.capacity) try self.grow(gpa);
 
-            self.frontptr = (self.frontptr - 1 + self.capacity) % self.capacity; //Modulo to find circular index
+            self.frontptr = (self.frontptr + self.capacity - 1) % self.capacity; //Modulo to find circular index
             self.items[self.frontptr] = val;
             self.size+=1;
         }
@@ -99,7 +99,7 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
             if(self.size == 0)
                 return error.Range;
 
-            self.backptr = (self.backptr - 1 + self.capacity) % self.capacity;
+            self.backptr = (self.backptr + self.capacity - 1) % self.capacity;
             const res: T =  self.items[self.backptr]; //Store desired value
             if(@typeInfo(T) == .Pointer) self.items[self.frontptr] = null; //Set to null to ensure it cannot be used again
             self.size-=1;

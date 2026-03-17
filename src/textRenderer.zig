@@ -79,7 +79,10 @@ fn initialiseCharRendering_new(face: freetype.FT_Face, allocator: std.mem.Alloca
 
         //Offset the glyph within the cell using bearing so it sits on the baseline
         const glyph_x = ox + @as(u32, @intCast(face.*.glyph.*.bitmap_left));
-        const glyph_y = oy + baseline - @as(u32, @intCast(face.*.glyph.*.bitmap_top));
+
+        // const glyph_x: u32 = @intCast(@as(i32, @intCast(ox)) - face.*.glyph.*.bitmap_top);
+        // const glyph_y = oy + baseline - @as(u32, @intCast(face.*.glyph.*.bitmap_top));
+        const glyph_y: u32 = @intCast(@as(i32, @intCast(oy)) + @as(i32, @intCast(baseline)) - face.*.glyph.*.bitmap_top);
 
         const bmp = face.*.glyph.*.bitmap;
         for(0..bmp.rows) |y| {
@@ -192,10 +195,11 @@ pub const renderer = struct {
         var x_cursor_pos: u16 = 0;
         var y_cursor_pos: u16 = 0;
 
-        for(tex_buf.screen.items) |line| {
+        for(0..tex_buf.screen.size) |i| {
             x_cursor_pos = 0;
-            for(line.characters.items) |char| {
-                const ch :u8 = char.char;
+            const line = tex_buf.screen.get(@intCast(i));
+            for(0..line.characters.items.len) |j| {
+                const ch :u8 = line.characters.items[j].char;
 
                 const xpos: f32 = @as(f32, @floatFromInt(x_cursor_pos * at.cell_w));
                 const ypos: f32 = @as(f32, @floatFromInt(y_cursor_pos * at.cell_h));
