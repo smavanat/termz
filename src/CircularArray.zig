@@ -61,7 +61,7 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
         pub fn addToBack(self: *CircularArray(T, alignment), val: T, gpa: std.mem.Allocator) !void {
             if(self.size >= self.capacity) try self.grow(gpa);
 
-            self.data[self.backptr] = val;
+            self.items[self.backptr] = val;
             self.backptr = (self.backptr + 1) % self.capacity; //Modulo to find circular index
             self.size+=1;
         }
@@ -77,7 +77,7 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
                 return error.Range;
 
             const res: T =  self.items[self.frontptr]; //Store desired value
-            if(@typeInfo(T) == .Pointer) self.items[self.frontptr] = null; //Set to null to ensure it cannot be used again
+            // if(@typeInfo(T) == .Pointer) self.items[self.frontptr] = null; //Set to null to ensure it cannot be used again
             self.frontptr = (self.frontptr + 1) % self.capacity;
             self.size-=1;
 
@@ -101,7 +101,7 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
 
             self.backptr = (self.backptr + self.capacity - 1) % self.capacity;
             const res: T =  self.items[self.backptr]; //Store desired value
-            if(@typeInfo(T) == .Pointer) self.items[self.frontptr] = null; //Set to null to ensure it cannot be used again
+            // if(@typeInfo(T) == .Pointer) self.items[self.frontptr] = null; //Set to null to ensure it cannot be used again
             self.size-=1;
 
             //Shrink when capacity too small
@@ -115,7 +115,7 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
         /// Clears all of the elements in the CircularArray
         /// @param gpa the allocator to use to free and reallocate the memory
         pub fn clear(self: *CircularArray(T, alignment), gpa: std.mem.Allocator) !void {
-            try gpa.free(self.items);
+            gpa.free(self.items);
             self.items = try gpa.alignedAlloc(T, alignment, self.capacity);
             self.size = 0;
             self.frontptr = 0;
@@ -146,7 +146,7 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
         /// Internal method to shrink the size of the array by a factor of two
         /// Copies all elements from the old buffer into the new buffer in sorted order
         /// @param gpa the allocator to use to free and reallocate the memory
-        fn shrink(self: *CircularArray(T, alignment), gpa: std.mem.Allocator) void {
+        fn shrink(self: *CircularArray(T, alignment), gpa: std.mem.Allocator) !void {
             const new_capacity = if(self.capacity > 1 ) self.capacity / 2 else 1;
             var new_items: []T = try gpa.alignedAlloc(T, alignment, self.capacity);
 
