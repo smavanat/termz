@@ -3,8 +3,8 @@ const std = @import("std");
 pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
     return struct {
         items: if(alignment) |a| ([]align(a.toByteUnits()) T) else []T, //Where all of the elements go
-        size: usize, //Current number of elements
-        capacity: usize, //Max number of elements
+        size: u32, //Current number of elements
+        capacity: u32, //Max number of elements
         frontptr: u32, //Pointer to the front of the CircularArray
         backptr: u32, //Pointer to the back of the CircularArray
 
@@ -13,9 +13,9 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
         /// @param iCapacity the desired initial capacity of the CircularArray
         /// @param almt the desired aligment of the CircularArray
         /// @return the created CircularArray
-        pub fn init(gpa: std.mem.Allocator, iCapacity: usize, almt: ?std.mem.Alignment) !CircularArray(T, alignment) {
-            return CircularArray(T, almt) {
-                .items = try gpa.alignedAlloc(T, almt, iCapacity),
+        pub fn init(gpa: std.mem.Allocator, iCapacity: u32) !CircularArray(T, alignment) {
+            return CircularArray(T, alignment) {
+                .items = try gpa.alignedAlloc(T, alignment, iCapacity),
                 .size = 0,
                 .capacity = iCapacity,
                 .frontptr = 0,

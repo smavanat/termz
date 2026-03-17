@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const imports = @import("imports.zig");
 
 const tr = imports.termz_core.tr;
+const tb = imports.termz_core.tb;
 
 const glfw = imports.termz_c_externals.glfw;
 const glad = imports.termz_c_externals.glad;
@@ -12,6 +13,8 @@ const cglm = imports.termz_c_externals.cglm;
 
 var gw: ?*glfw.GLFWwindow = null;
 var tRenderer: tr.renderer = undefined;
+var text_buf: *tb.text_buffer = undefined;
+var atls: ?*tr.atlas = null;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) callconv(.c) void {
@@ -70,7 +73,9 @@ fn init(window: *?*glfw.GLFWwindow) bool {
 
     _ = freetype.FT_Set_Pixel_Sizes(face, 0, 48); //Setting the pixel font size we would like to get from the face
 
-    tRenderer = tr.renderer.init("data/shaders/glyph.frag", "data/shaders/glyph.vert", gpa.allocator(), face) catch return false;
+    tRenderer = tr.renderer.init("data/shaders/glyph.frag", "data/shaders/glyph.vert", gpa.allocator(), face, &atls) catch return false;
+    text_buf = gpa.allocator().create(tb.text_buffer) catch return false;
+    text_buf.* = tb.text_buffer.init(800/atls.?.*.cell_w, 600/atls.?.*.cell_h, gpa.allocator()) catch return false;
 
     //Freeing freetype's resources
     _ = freetype.FT_Done_Face(face);
@@ -95,8 +100,9 @@ pub fn main() !void {
             glad.glClearColor(1.0, 1.0, 1.0, 1.0);
             glad.glClear(glad.GL_COLOR_BUFFER_BIT);
 
-            tRenderer.renderText("This is sample text", 45.0, 45.0, 1.0, .{.x = 0.5, .y = 0.8, .z = 0.2, .w =1.0});
-            tRenderer.renderText("(C) LearnOpenGL.com", 520.0, 540.0, 1.0, .{.x = 0.3, .y = 0.7, .z = 0.9, .w = 1.0});
+            // tRenderer.renderText("This is sample text", 45.0, 45.0, 1.0, .{.x = 0.5, .y = 0.8, .z = 0.2, .w =1.0});
+            // tRenderer.renderText("(C) LearnOpenGL.com", 520.0, 540.0, 1.0, .{.x = 0.3, .y = 0.7, .z = 0.9, .w = 1.0});
+            tRenderer.renderTextBuffer(text_buf, atls.?);
 
             //check and call events and swap the buffers
             glfw.glfwSwapBuffers(gw);

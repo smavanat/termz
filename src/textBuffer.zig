@@ -25,7 +25,7 @@ pub const TrailFlag = enum(u2) {
 ///      a TrailFlag representing the type of the cell
 pub const character_cell = struct {
     char: u8,
-    style: [Style.NUM_STYLES]bool,
+    style: [@intFromEnum(Style.NUM_STYLES)]bool,
     backgroundColour: ?*mu.vec4,
     foregroundColour: ?*mu.vec4,
     trailFlag: TrailFlag,
@@ -43,7 +43,9 @@ const terminal_line = struct {
     wrapped: bool,
 
     pub fn init(width: u32, wrap: bool, gpa: std.mem.Allocator) !terminal_line {
-        return terminal_line{ .characters = try gpa.create(try std.ArrayList(character_cell).initCapacity(gpa, width)), .width = width, .wrapped = wrap };
+        const ch_ptr = try gpa.create(std.ArrayList(character_cell));
+        ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
+        return terminal_line{ .characters = ch_ptr, .width = width, .wrapped = wrap };
     }
 };
 
@@ -62,18 +64,24 @@ pub const text_buffer = struct {
     screen: *ca.CircularArray(*terminal_line, null),
 
     pub fn init(w: u32, h: u32, gpa: std.mem.Allocator) !text_buffer {
-        const sb_ptr = try gpa.create(try std.ArrayList(std.ArrayList(character_cell)).initCapacity(gpa, h * 2));
-        const init_line = try gpa.create(try std.ArrayList(character_cell).initCapacity(gpa, w));
-        sb_ptr.*.append(gpa, init_line);
+        const sb_ptr = try gpa.create(std.ArrayList(*std.ArrayList(character_cell)));
+        sb_ptr.* = try std.ArrayList(*std.ArrayList(character_cell)).initCapacity(gpa, h * 2);
+        const init_line = try gpa.create(std.ArrayList(character_cell));
+        init_line.* = try std.ArrayList(character_cell).initCapacity(gpa, w);
+        try sb_ptr.*.append(gpa, init_line);
 
-        const s_ptr = try gpa.create(try ca.CircularArray(terminal_line, null).init(gpa, h, null));
-        const init_tline = try gpa.create(try terminal_line.init(w, false, gpa));
-        s_ptr.addToFront(init_tline, gpa);
+        const s_ptr = try gpa.create(ca.CircularArray(*terminal_line, null));
+        s_ptr.* = try ca.CircularArray(*terminal_line, null).init(gpa, h);
+        const init_tline = try gpa.create(terminal_line);
+        init_tline.* = try terminal_line.init(w, false, gpa);
+        try s_ptr.addToFront(init_tline, gpa);
 
-        const bc_ptr = try gpa.create(mu.vec4.init(1.0, 1.0, 1.0, 1.0));
-        const fc_ptr = try gpa.create(mu.vec4.init(1.0, 1.0, 1.0, 1.0));
+        const bc_ptr = try gpa.create(mu.vec4);
+        bc_ptr.* = mu.vec4.init(1.0, 1.0, 1.0, 1.0);
+        const fc_ptr = try gpa.create(mu.vec4);
+        fc_ptr.* = mu.vec4.init(1.0, 1.0, 1.0, 1.0);
 
-        return text_buffer{ .width = w, .height = h, .cursorX = 0, .cursorY = 0, .backgroundColour = bc_ptr, .foregroundColour = fc_ptr, .scrollback = sb_ptr, .screen = s_ptr };
+        return text_buffer{ .width = w, .height = h, .cursorX = 0, .cursorY = 0, .bottomIndex = 0, .backgroundColour = bc_ptr, .foregroundColour = fc_ptr, .scrollback = sb_ptr, .screen = s_ptr };
     }
 
     /// @return the on-screen x position of the cursor
@@ -190,7 +198,9 @@ pub const text_buffer = struct {
     pub fn clearScreen(self: *text_buffer, gpa: std.mem.Allocator) !void {
         try self.addNewLine(gpa);
         try self.screen.clear();
-        try self.screen.addToFront(try gpa.create(try terminal_line.init(self.width, false, gpa)));
+        const nline_ptr = try gpa.create(terminal_line);
+        nline_ptr.* = try terminal_line.init(self.width, false, gpa);
+        try self.screen.addToFront(nline_ptr);
 
         self.cursorX = 0;
         self.cursorY = 0;
@@ -221,13 +231,15 @@ pub const text_buffer = struct {
         const line: std.ArrayList(character_cell) = self.scrollback.items[self.cursorY];
         const oldLines: u32 = logicalToTerminal(self.cursorY);
 
-        try line.insert(gpa, self.cursorX, try gpa.create(try character_cell.init(text)));
+        const ch_ptr = try gpa.create(character_cell);
+        ch_ptr.*= try character_cell.init(text);
+        try line.insert(gpa, self.cursorX, ch_ptr);
 
         if (oldLines < logicalToTerminal(self.cursorY)) {
             self.rebuildScreen();
         } //Need to shift the screen down
         else { //Otherwise just write to the screen as well
-            try self.screen.get(getScreenCursorY()).characters.insert(gpa, getScreenCursorX(), try gpa.create(try character_cell.init(text)));
+            try self.screen.get(getScreenCursorY()).characters.insert(gpa, getScreenCursorX(), ch_ptr);
         }
 
         self.moveCursorX(1);
@@ -254,7 +266,8 @@ pub const text_buffer = struct {
         var index: u32 = 0;
 
         while (true) {
-            const screenLine: terminal_line = try gpa.create(try terminal_line.init(self.width, index != 0, gpa)); //Creating a new screen line
+            const screenLine: *terminal_line = try gpa.create(terminal_line); //Creating a new screen line
+            screenLine.* = try terminal_line.init(self.width, index != 0, gpa);
 
             var x: u32 = 0; //Tracks the x position in the screen line
             while (x < self.width and index < logical.items.len) {
@@ -263,16 +276,16 @@ pub const text_buffer = struct {
 
                 if (x + charWidth > self.width) break; //Wide characters at the end of a line must go onto a newline
 
-                screenLine.characters.append(cell);
+                try screenLine.characters.append(cell);
                 x += charWidth;
                 index += 1;
             }
 
-            self.screen.addToBack(screenLine); //Adding it to the bottom of the screen
+            try self.screen.addToBack(screenLine); //Adding it to the bottom of the screen
 
             //Removing excess screen lines
             if (self.screen.size > self.height) {
-                self.screen.removeFromFront();
+                try self.screen.removeFromFront();
             }
 
             if (index < logical.items.len) break;
@@ -282,7 +295,9 @@ pub const text_buffer = struct {
     /// Adds an empty line to the bottom of the screen and removes extra lines if we are over the scrollback buffer
     /// Does not move the screen contents
     fn addNewLine(self: *text_buffer, gpa: std.mem.Allocator) !void {
-        try self.scrollback.append(try gpa.create(std.ArrayList(character_cell).initCapacity(self.width)));
+        const nline_ptr = try gpa.create(std.ArrayList(character_cell));
+        nline_ptr.* = std.ArrayList(character_cell).initCapacity(self.width);
+        try self.scrollback.append(nline_ptr);
         self.moveCursorY(1, gpa);
         self.cursorX = 0;
     }
