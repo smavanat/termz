@@ -29,10 +29,19 @@ fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) c
     _ = window; //To prevent the stupid unused function parameter errors
 }
 
-pub fn charCallback(window: ?*glfw.GLFWwindow, codepoint: u32) callconv(.c) void {
+fn charCallback(window: ?*glfw.GLFWwindow, codepoint: u32) callconv(.c) void {
     in.onCharInput(text_buf, codepoint, gpa.allocator());
 
     _ = window;
+}
+
+fn keyCallback(window: ?*glfw.GLFWwindow, key: i32, scancode: i32, action: i32, mods: i32) callconv(.c) void {
+    if(action == glfw.GLFW_PRESS or action == glfw.GLFW_REPEAT)
+        in.keyCallback(text_buf, key, gpa.allocator());
+
+    _ = window;
+    _ = scancode;
+    _ = mods;
 }
 
 fn init(window: *?*glfw.GLFWwindow) bool {
@@ -56,6 +65,7 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     glfw.glfwMakeContextCurrent(window.*.?);
     _ = glfw.glfwSetFramebufferSizeCallback(window.*.?, framebufferSizeCallback);
     _ = glfw.glfwSetCharCallback(window.*.?, charCallback);
+    _ = glfw.glfwSetKeyCallback(window.*.?, keyCallback);
 
     //Loading GLAD
     const loader: glad.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
@@ -79,9 +89,9 @@ fn init(window: *?*glfw.GLFWwindow) bool {
         return false;
     }
 
-    _ = freetype.FT_Set_Pixel_Sizes(face, 0, 48); //Setting the pixel font size we would like to get from the face
+    _ = freetype.FT_Set_Pixel_Sizes(face, 0, 24); //Setting the pixel font size we would like to get from the face
 
-    tRenderer = tr.renderer.init("data/shaders/glyph.frag", "data/shaders/glyph.vert", gpa.allocator(), face, &atls) catch return false;
+    tRenderer = tr.renderer.init(gpa.allocator(), face, &atls) catch return false;
     text_buf = gpa.allocator().create(tb.text_buffer) catch return false;
     text_buf.* = tb.text_buffer.init(800/atls.?.*.cell_w, 600/atls.?.*.cell_h, gpa.allocator()) catch return false;
 
@@ -119,6 +129,13 @@ pub fn main() !void {
 
         glfw.glfwTerminate();
         tRenderer.deinit();
+
+        text_buf.deinit(gpa.allocator());
+        gpa.allocator().destroy(text_buf);
+
+        atls.?.deinit(gpa.allocator());
+        gpa.allocator().destroy(atls.?);
+
         _ = gpa.deinit();
     }
 }

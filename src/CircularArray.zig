@@ -32,7 +32,6 @@ pub fn CircularArray(comptime T: type, alignment: ?std.mem.Alignment) type {
             self.capacity = 0;
             self.backptr = 0;
             self.frontptr = 0;
-            gpa.free(self);
         }
 
         /// Returns the element at the specified index of the CircularArray

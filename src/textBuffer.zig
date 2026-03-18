@@ -45,7 +45,17 @@ const terminal_line = struct {
     pub fn init(width: u32, wrap: bool, gpa: std.mem.Allocator) !terminal_line {
         const ch_ptr = try gpa.create(std.ArrayList(character_cell));
         ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
+        if(!wrap) {
+            try ch_ptr.append(gpa, try character_cell.init('$'));
+            try ch_ptr.append(gpa, try character_cell.init(' '));
+        }
         return terminal_line{ .characters = ch_ptr, .width = width, .wrapped = wrap };
+    }
+
+    pub fn deinit(self: *terminal_line, gpa: std.mem.Allocator) void {
+        self.characters.deinit(gpa);
+        // gpa.free(self);
+        gpa.destroy(self.characters);
     }
 };
 
@@ -89,6 +99,27 @@ pub const text_buffer = struct {
         return text_buffer{ .width = w, .height = h, .cursorX = 0, .cursorY = 0, .bottomIndex = 0, .backgroundColour = bc_ptr, .foregroundColour = fc_ptr, .scrollback = sb_ptr, .screen = s_ptr };
     }
 
+    pub fn deinit(self: *text_buffer, gpa: std.mem.Allocator) void {
+        gpa.destroy(self.backgroundColour);
+        gpa.destroy(self.foregroundColour);
+
+        for(0..self.screen.size) |i| {
+            const line = self.screen.get(@intCast(i));
+            line.deinit(gpa);
+            gpa.destroy(line);
+        }
+        self.screen.deinit(gpa);
+        gpa.destroy(self.screen);
+
+        for(0..self.scrollback.items.len) |i| {
+            const line = self.scrollback.items[i];
+            line.deinit(gpa);
+            gpa.destroy(line);
+        }
+        self.scrollback.deinit(gpa);
+        gpa.destroy(self.scrollback);
+    }
+
     /// @return the on-screen x position of the cursor
     pub fn getScreenCursorX(self: *text_buffer) u32 {
         return self.cursorX % self.width;
@@ -106,7 +137,7 @@ pub const text_buffer = struct {
             logicalY -= 1;
         }
         //See how many extra lines the characters after the logical x-position of the cursor are
-        screenY -= ((@as(u32, @intCast(self.scrollback.items[self.cursorY].items.len)) - self.cursorX - 1 + self.width - 1) / self.width);
+        screenY -= ((@as(u32, @intCast(self.scrollback.items[self.cursorY].items.len)) + self.width - 1 - self.cursorX - 1) / self.width);
         return @max(0, @min(screenY, self.height - 1)); //Clamp the value
     }
 
@@ -140,17 +171,17 @@ pub const text_buffer = struct {
     /// If the new position is on a line off of the screen, scroll
     /// @param val the new x position to move the cursor to
     pub fn setCursorY(self: *text_buffer, val: u32, gpa: std.mem.Allocator) !void {
-        const screenTop: u32 = getLogicalScreenTop();
-        const clampedVal: u32 = @max(0, @min(val, self.scrollback.items.len - 1));
+        const screenTop: u32 = self.getLogicalScreenTop();
+        const clampedVal: i32 = @as(i32, @intCast(@max(0, @min(val, self.scrollback.items.len - 1))));
 
         if (clampedVal < screenTop) {
-            try self.scroll(clampedVal - screenTop, gpa);
+            try self.scroll(clampedVal - @as(i32, @intCast(screenTop)), gpa);
         } else if (clampedVal > self.bottomIndex) {
-            try self.scroll(clampedVal - self.bottomIndex, gpa);
+            try self.scroll(clampedVal - @as(i32, @intCast(self.bottomIndex)), gpa);
         }
 
-        self.cursorY = clampedVal;
-        self.setCursorX(@min(self.cursorX, self.scrollback.items[self.cursorY].len)); //Setting the x position so that its at not off the end of the line we moved to
+        self.cursorY = @intCast(clampedVal);
+        self.setCursorX(@min(self.cursorX, self.scrollback.items[self.cursorY].items.len)); //Setting the x position so that its at not off the end of the line we moved to
     }
 
     /// Moves the cursor's x position by some amount of steps. Negative values move to the left, positive values move to the right.
@@ -177,7 +208,7 @@ pub const text_buffer = struct {
     /// The cursor's end position is clamped between [0, number of lines)
     /// @param val the number of steps to move
     pub fn moveCursorY(self: *text_buffer, val: i32, gpa: std.mem.Allocator) !void {
-        try self.setCursorY(val + self.cursorY, gpa);
+        try self.setCursorY(@as(u32, @intCast(val + @as(i32, @intCast(self.cursorY)))), gpa);
     }
 
     // =============== BUFFER MANIPULATION ==================
@@ -186,7 +217,7 @@ pub const text_buffer = struct {
     /// Clears the current screen buffer and rebuilds it using the new bottom of the screen as a reference into the scrollback
     /// @param spaces the number of spaces to scroll by. negative means down, positive means up
     pub fn scroll(self: *text_buffer, spaces: i32, gpa: std.mem.Allocator) !void {
-        self.bottomIndex = @max(0, @min(self.bottomIndex + spaces, self.scrollback.size() - 1)); //Calculate the new screen bottom
+        self.bottomIndex = @as(u32, @intCast(@max(0, @min(@as(i32, @intCast(self.bottomIndex)) + spaces, @as(i32, @intCast(self.scrollback.items.len)) - 1)))); //Calculate the new screen bottom
 
         try self.rebuildScreen(gpa);
     }
@@ -251,6 +282,52 @@ pub const text_buffer = struct {
         return true;
     }
 
+    /// Moves the cursor left one position and removes the character at the cursor's new position
+    /// If the cursor lands on a wide char, removes both characters in the char
+    /// @param gpa the allocator to use to allocate new screen data if necessary
+    /// @return true on successful removal, false if it is not at the bottom line in the scrollback or if there is no char to erase
+    pub fn deleteText(self: *text_buffer, gpa: std.mem.Allocator) !bool {
+        if(self.cursorY != self.scrollback.items.len-1 or self.bottomIndex != self.scrollback.items.len-1 or self.cursorX <= 0) return false;
+
+        const line: *std.ArrayList(character_cell)= self.scrollback.items[self.cursorY];
+        const oldLines: u32 = self.logicalToTerminal(self.cursorY);
+
+        self.cursorX-=1; //Move the cursor back one space
+
+        // const deleted: character_cell = line.items[self.cursorX]; //Get the char to be deleted
+
+        // if(deleted.getTrailFlag() == TrailFlag.WIDE_END) { //If on second half of a wide char need to delete both halves
+        //     line.remove(cursorX-1);
+        //     line.remove(cursorX-1); //Calling it twice moves the second half back to the cursor's position
+        // }
+        // else if(deleted.getTrailFlag() == TrailFlag.WIDE_START) {
+        //     line.remove(cursorX);
+        //     line.remove(cursorX); //Calling it twice moves the second half back to the cursor's position
+        // }
+        // else {
+            _ = line.orderedRemove(self.cursorX);
+        // }
+
+        if(oldLines != self.logicalToTerminal(self.cursorY)) {try self.rebuildScreen(gpa);} //Need to shift the screen down
+        else {
+            const screenLine: *terminal_line = self.screen.get(self.getScreenCursorY());
+            // if(deleted.getTrailFlag() == TrailFlag.WIDE_END) { //If on second half of a wide char need to delete both halves
+            //     cursorX--;
+            //     screenLine.remove(getScreenCursorX());
+            //     screenLine.remove(getScreenCursorX()); //Calling it twice moves the second half back to the cursor's position
+            // }
+            // else if(deleted.getTrailFlag() == TrailFlag.WIDE_START) {
+            //     screenLine.remove(getScreenCursorX());
+            //     screenLine.remove(getScreenCursorX()); //Calling it twice moves the second half back to the cursor's position
+            // }
+            // else {
+                _ = screenLine.characters.orderedRemove(self.getScreenCursorX());
+            // }
+        }
+
+        return true;
+    }
+
     // =============== DEBUG FUNCTIONS ==================
 
     pub fn printScreenContents(self: *text_buffer) void {
@@ -264,14 +341,18 @@ pub const text_buffer = struct {
         }
     }
 
-
     // =============== HELPER FUNCTIONS ==================
 
     /// Rebuilds the screen from the bottom index
     fn rebuildScreen(self: *text_buffer, gpa: std.mem.Allocator) !void {
+        for(0..self.screen.size) |i| {
+            const line = self.screen.get(@intCast(i));
+            line.deinit(gpa);
+            gpa.destroy(line);
+        }
         try self.screen.clear(gpa);
 
-        const start: u32 = @max(0, self.bottomIndex - self.height + 1); //Get the top of the new screen
+        const start: u32 = @max(0, @as(i32, @intCast(self.bottomIndex)) - @as(i32, @intCast(self.height)) + 1); //Get the top of the new screen
 
         for (start..self.bottomIndex + 1) |i| {
             try self.wrapLogicalLine(self.scrollback.items[i], gpa); //Wrap the line so it fits the current screen width
@@ -307,7 +388,7 @@ pub const text_buffer = struct {
                 _ = try self.screen.removeFromFront(gpa);
             }
 
-            if (index < logical.items.len) break;
+            if (index >= logical.items.len) break;
         }
     }
 
@@ -315,9 +396,9 @@ pub const text_buffer = struct {
     /// Does not move the screen contents
     fn addNewLine(self: *text_buffer, gpa: std.mem.Allocator) !void {
         const nline_ptr = try gpa.create(std.ArrayList(character_cell));
-        nline_ptr.* = std.ArrayList(character_cell).initCapacity(self.width);
-        try self.scrollback.append(nline_ptr);
-        self.moveCursorY(1, gpa);
+        nline_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, self.width);
+        try self.scrollback.append(gpa, nline_ptr);
+        try self.moveCursorY(1, gpa);
         self.cursorX = 0;
     }
 
@@ -332,7 +413,7 @@ pub const text_buffer = struct {
     /// @return the index of the logical line at the top of the screen
     fn getLogicalScreenTop(self: *text_buffer) u32 {
         var screenTop: u32 = self.bottomIndex; //The logical line at the top of the screen
-        var remainingRows: u32 = self.screen.items.len - 1; //Number of rows we haven't seen to be filled by a logical line in the screen
+        var remainingRows: usize = self.screen.items.len - 1; //Number of rows we haven't seen to be filled by a logical line in the screen
 
         while (screenTop > 0 and remainingRows > 0) {
             remainingRows -= self.logicalToTerminal(screenTop); //Otherwise decrease the number of remaining unfilled rows on the screen

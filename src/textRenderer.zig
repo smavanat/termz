@@ -14,8 +14,13 @@ pub const atlas = struct {
     rows: u32,
     cell_w: u32,
     cell_h: u32,
-    textureID: u32, 
+    textureID: u32,
     uvs: []mu.vec4,
+
+    pub fn deinit(self: *atlas, gpa: std.mem.Allocator) void {
+        gpa.free(self.uvs);
+        // gpa.free(self);
+    }
 };
 
 fn initialiseCharRendering(face: freetype.FT_Face, allocator: std.mem.Allocator, at: *?*atlas) !void {
@@ -30,7 +35,9 @@ fn initialiseCharRendering(face: freetype.FT_Face, allocator: std.mem.Allocator,
     at.*.?.cols = 16;
     at.*.?.rows = 16;
     at.*.?.cell_w = @intCast(face.*.size.*.metrics.max_advance >> 6);
-    at.*.?.cell_h = @intCast(face.*.size.*.metrics.height >> 6);
+    const ascender: u32 = @intCast(face.*.size.*.metrics.ascender >> 6);
+    const descender: u32 = @intCast(-(face.*.size.*.metrics.descender >> 6)); // descender is negative
+    at.*.?.cell_h = ascender + descender;
     at.*.?.uvs = try allocator.alignedAlloc(mu.vec4, null, at.*.?.cols * at.*.?.rows);
 
     const atlas_w = at.*.?.cell_w * at.*.?.cols;
@@ -95,10 +102,11 @@ pub const renderer = struct {
     vao: u32,
     vbo: u32,
     ebo: u32,
-    shader: u32,
+    foreground_shader: u32,
+    background_shader: u32,
     projection: cglm.mat4 align(32),
 
-    pub fn init(fragment_path: []const u8, vertex_path: []const u8, allocator: std.mem.Allocator, face: freetype.FT_Face, at: *?*atlas) !renderer {
+    pub fn init(allocator: std.mem.Allocator, face: freetype.FT_Face, at: *?*atlas) !renderer {
         //Generating the buffers
         var vao: c_uint = undefined;
         var vbo: c_uint = undefined;
@@ -113,12 +121,15 @@ pub const renderer = struct {
         glad.glBindBuffer(glad.GL_ARRAY_BUFFER, 0);
         glad.glBindVertexArray(0);
 
-        const shader = try s.loadShader(fragment_path, vertex_path, allocator);
-        glad.glUseProgram(shader);
-        const loc = glad.glGetUniformLocation(shader, "text");
-        glad.glUniform1i(loc, 0);
+        const fg_shader = try s.loadShader("data/shaders/glyph.frag", "data/shaders/glyph.vert", allocator);
+        glad.glUseProgram(fg_shader);
+        // const loc = glad.glGetUniformLocation(fg_shader, "text");
+        // glad.glUniform1i(loc, 0);
 
-        var r = renderer{.vao = vao, .vbo = vbo, .ebo = 0, .shader = shader, .projection = undefined};
+        const bg_shader = try s.loadShader("data/shaders/bkgd.frag", "data/shaders/bkgd.vert", allocator);
+        glad.glUseProgram(bg_shader);
+
+        var r = renderer{.vao = vao, .vbo = vbo, .ebo = 0, .foreground_shader = fg_shader, .background_shader = bg_shader, .projection = undefined};
 
         cglm.glm_ortho(0.0, 800.0, 600.0, 0.0, -1.0, 1.0, &r.projection);
 
@@ -131,13 +142,13 @@ pub const renderer = struct {
     }
 
     pub fn renderTextBuffer(self: *renderer, tex_buf: *tb.text_buffer, at: *atlas) void {
-        s.use(self.shader);
-        glad.glUniform3f(glad.glGetUniformLocation(@intCast(self.shader), "textColor"), tex_buf.foregroundColour.x, tex_buf.foregroundColour.y, tex_buf.foregroundColour.z);
+        s.use(self.foreground_shader);
+        glad.glUniform3f(glad.glGetUniformLocation(@intCast(self.foreground_shader), "textColor"), tex_buf.foregroundColour.x, tex_buf.foregroundColour.y, tex_buf.foregroundColour.z);
         glad.glActiveTexture(glad.GL_TEXTURE0);
         glad.glBindTexture(glad.GL_TEXTURE_2D, at.textureID);  // not self.screen_tex
         glad.glBindVertexArray(self.vao);
         glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.vbo);
-        const proj_loc = glad.glGetUniformLocation(self.shader, "projection");
+        const proj_loc = glad.glGetUniformLocation(self.foreground_shader, "projection");
         glad.glUniformMatrix4fv(proj_loc, 1, glad.GL_FALSE, @ptrCast(&self.projection));
 
         var x_cursor_pos: u16 = 0;
