@@ -8,6 +8,7 @@ const lca = @import("CircularArray.zig");
 const lsh = @import("shader.zig");
 const lfu = @import("fileUtils.zig");
 const lmu = @import("mathsUtils.zig");
+const lin = @import("input.zig");
 
 pub const termz_core = struct {
     /// Import for textRenderer.zig
@@ -22,6 +23,8 @@ pub const termz_core = struct {
     pub const fu = lfu;
     /// Import for mathsUtils.zig
     pub const mu = lmu;
+    /// Import for input.zig
+    pub const in = lin;
 };
 
 const lglad = @cImport({@cInclude("glad/glad.h");});

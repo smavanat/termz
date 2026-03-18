@@ -5,6 +5,7 @@ const imports = @import("imports.zig");
 
 const tr = imports.termz_core.tr;
 const tb = imports.termz_core.tb;
+const in = imports.termz_core.in;
 
 const glfw = imports.termz_c_externals.glfw;
 const glad = imports.termz_c_externals.glad;
@@ -28,6 +29,12 @@ fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) c
     _ = window; //To prevent the stupid unused function parameter errors
 }
 
+pub fn charCallback(window: ?*glfw.GLFWwindow, codepoint: u32) callconv(.c) void {
+    in.onCharInput(text_buf, codepoint, gpa.allocator());
+
+    _ = window;
+}
+
 fn init(window: *?*glfw.GLFWwindow) bool {
     //Initialising GLFW
     _ = glfw.glfwInit();
@@ -48,6 +55,7 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     }
     glfw.glfwMakeContextCurrent(window.*.?);
     _ = glfw.glfwSetFramebufferSizeCallback(window.*.?, framebufferSizeCallback);
+    _ = glfw.glfwSetCharCallback(window.*.?, charCallback);
 
     //Loading GLAD
     const loader: glad.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
@@ -77,11 +85,6 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     text_buf = gpa.allocator().create(tb.text_buffer) catch return false;
     text_buf.* = tb.text_buffer.init(800/atls.?.*.cell_w, 600/atls.?.*.cell_h, gpa.allocator()) catch return false;
 
-    //Test text rendering. Doesn't work just yet
-    for(0..10) |i| {
-        _ = text_buf.insertText(@intCast(i + '0'), gpa.allocator()) catch return false;
-    }
-
     text_buf.printScreenContents();
 
     //Freeing freetype's resources
@@ -107,13 +110,11 @@ pub fn main() !void {
             glad.glClearColor(1.0, 1.0, 1.0, 1.0);
             glad.glClear(glad.GL_COLOR_BUFFER_BIT);
 
-            // tRenderer.renderText("This is sample text", 45.0, 45.0, 1.0, .{.x = 0.5, .y = 0.8, .z = 0.2, .w =1.0});
-            // tRenderer.renderText("(C) LearnOpenGL.com", 520.0, 540.0, 1.0, .{.x = 0.3, .y = 0.7, .z = 0.9, .w = 1.0});
             tRenderer.renderTextBuffer(text_buf, atls.?);
 
             //check and call events and swap the buffers
             glfw.glfwSwapBuffers(gw);
-            glfw.glfwPollEvents();
+            glfw.glfwWaitEvents(); //Wait until something actually happens
         }
 
         glfw.glfwTerminate();

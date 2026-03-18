@@ -9,15 +9,6 @@ const glad = imports.termz_c_externals.glad;
 const freetype = imports.termz_c_externals.freetype;
 const cglm = imports.termz_c_externals.cglm;
 
-//TODO: NEED TO ACTUALLY MAKE THE ATLAS TEXTURE AND RENDER FROM IT IN THE TEXT RENDERER
-
-const character = struct {
-    textureID: u32,
-    size: mu.ivec2,
-    bearing: mu.ivec2,
-    advance: u32
-};
-
 pub const atlas = struct {
     cols: u32,
     rows: u32,
