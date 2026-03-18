@@ -66,18 +66,23 @@ pub const text_buffer = struct {
     pub fn init(w: u32, h: u32, gpa: std.mem.Allocator) !text_buffer {
         const sb_ptr = try gpa.create(std.ArrayList(*std.ArrayList(character_cell)));
         sb_ptr.* = try std.ArrayList(*std.ArrayList(character_cell)).initCapacity(gpa, h * 2);
+
         const init_line = try gpa.create(std.ArrayList(character_cell));
         init_line.* = try std.ArrayList(character_cell).initCapacity(gpa, w);
+
         try sb_ptr.*.append(gpa, init_line);
 
         const s_ptr = try gpa.create(ca.CircularArray(*terminal_line, null));
         s_ptr.* = try ca.CircularArray(*terminal_line, null).init(gpa, h);
+
         const init_tline = try gpa.create(terminal_line);
         init_tline.* = try terminal_line.init(w, false, gpa);
+
         try s_ptr.addToFront(init_tline, gpa);
 
         const bc_ptr = try gpa.create(mu.vec4);
-        bc_ptr.* = mu.vec4.init(1.0, 1.0, 1.0, 1.0);
+        bc_ptr.* = mu.vec4.init(0.0, 0.0, 0.0, 1.0);
+
         const fc_ptr = try gpa.create(mu.vec4);
         fc_ptr.* = mu.vec4.init(0.0, 0.0, 0.0, 1.0);
 
@@ -245,6 +250,20 @@ pub const text_buffer = struct {
         self.moveCursorX(1);
         return true;
     }
+
+    // =============== DEBUG FUNCTIONS ==================
+
+    pub fn printScreenContents(self: *text_buffer) void {
+        for(0..self.screen.size) |i| {
+            const line = self.screen.get(@intCast(i));
+            for(0..line.characters.items.len) |j| {
+                if(line.characters.items[j].trailFlag != TrailFlag.WIDE_END) //Skip dummy chars
+                    std.debug.print("{c}", .{line.characters.items[j].char});
+            }
+            std.debug.print("\n", .{});
+        }
+    }
+
 
     // =============== HELPER FUNCTIONS ==================
 

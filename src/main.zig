@@ -77,10 +77,12 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     text_buf = gpa.allocator().create(tb.text_buffer) catch return false;
     text_buf.* = tb.text_buffer.init(800/atls.?.*.cell_w, 600/atls.?.*.cell_h, gpa.allocator()) catch return false;
 
-
+    //Test text rendering. Doesn't work just yet
     for(0..10) |i| {
         _ = text_buf.insertText(@intCast(i + '0'), gpa.allocator()) catch return false;
     }
+
+    text_buf.printScreenContents();
 
     //Freeing freetype's resources
     _ = freetype.FT_Done_Face(face);
