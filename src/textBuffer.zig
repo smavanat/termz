@@ -45,10 +45,10 @@ const terminal_line = struct {
     pub fn init(width: u32, wrap: bool, gpa: std.mem.Allocator) !terminal_line {
         const ch_ptr = try gpa.create(std.ArrayList(character_cell));
         ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
-        if(!wrap) {
-            try ch_ptr.append(gpa, try character_cell.init('$'));
-            try ch_ptr.append(gpa, try character_cell.init(' '));
-        }
+        // if(!wrap) {
+        //     try ch_ptr.append(gpa, try character_cell.init('$'));
+        //     try ch_ptr.append(gpa, try character_cell.init(' '));
+        // }
         return terminal_line{ .characters = ch_ptr, .width = width, .wrapped = wrap };
     }
 
@@ -91,7 +91,7 @@ pub const text_buffer = struct {
         try s_ptr.addToFront(init_tline, gpa);
 
         const bc_ptr = try gpa.create(mu.vec4);
-        bc_ptr.* = mu.vec4.init(0.0, 0.0, 0.0, 1.0);
+        bc_ptr.* = mu.vec4.init(1.0, 1.0, 1.0, 1.0);
 
         const fc_ptr = try gpa.create(mu.vec4);
         fc_ptr.* = mu.vec4.init(0.0, 0.0, 0.0, 1.0);
@@ -136,8 +136,8 @@ pub const text_buffer = struct {
             if(logicalY == 0) break;
             logicalY -= 1;
         }
-        //See how many extra lines the characters after the logical x-position of the cursor are
-        screenY -= ((@as(u32, @intCast(self.scrollback.items[self.cursorY].items.len)) + self.width - 1 - self.cursorX - 1) / self.width);
+
+        // if(screenY == 0) screenY += self.logicalToTerminal(logicalY)-1;
         return @max(0, @min(screenY, self.height - 1)); //Clamp the value
     }
 
@@ -160,8 +160,16 @@ pub const text_buffer = struct {
     /// Sets a cursor's x position to the specified position, clamped between [0, logical line width)
     /// If the cursor ends at a cell with {@link TrailFlag} WIDE_END, move one cell to the left
     /// @param val the new x position to move the cursor to
-    pub fn setCursorX(self: *text_buffer, val: u32) void {
+    pub fn setCursorX(self: *text_buffer, val: u32, gpa: std.mem.Allocator) !void {
         self.cursorX = @max(0, @min(val, self.scrollback.items[self.cursorY].items.len));
+        if(self.cursorX != 0 and self.cursorX % self.width == 0) {
+            if(self.screen.size == self.height) {
+                try self.scroll(1, gpa);
+            }
+            const tline_ptr = try gpa.create(terminal_line);
+            tline_ptr.* = try terminal_line.init(self.width, true, gpa);
+            try self.screen.addToBack(tline_ptr, gpa);
+        }
 
         if (self.cursorX > 0 and self.cursorX < self.scrollback.items[self.cursorY].items.len and self.scrollback.items[self.cursorY].items[self.cursorX].trailFlag == TrailFlag.WIDE_END) //Cursor can never land on the end of a wide character
             self.cursorX -= 1;
@@ -181,15 +189,15 @@ pub const text_buffer = struct {
         }
 
         self.cursorY = @intCast(clampedVal);
-        self.setCursorX(@min(self.cursorX, self.scrollback.items[self.cursorY].items.len)); //Setting the x position so that its at not off the end of the line we moved to
+        try self.setCursorX(@min(self.cursorX, self.scrollback.items[self.cursorY].items.len), gpa); //Setting the x position so that its at not off the end of the line we moved to
     }
 
     /// Moves the cursor's x position by some amount of steps. Negative values move to the left, positive values move to the right.
     /// The cursor's end position is clamped between [0, line_width), where line_width is the number of characters in the unwrapped line the cursor is on
     /// If the cursor ends at a cell with TrailFlag WIDE_END, move one cell in the direction you want to move to
     /// @param val the number of steps to move
-    pub fn moveCursorX(self: *text_buffer, val: i32) void {
-        var pos: u32 = @intCast(val + @as(i32, @intCast(self.cursorX)));
+    pub fn moveCursorX(self: *text_buffer, val: i32, gpa: std.mem.Allocator) !void {
+        var pos: u32 = @intCast(@max(0, val + @as(i32, @intCast(self.cursorX))));
 
         const line: *std.ArrayList(character_cell) = self.scrollback.items[self.cursorY];
         //If we are moving to an empty flag, skip it
@@ -201,7 +209,7 @@ pub const text_buffer = struct {
                 pos -= 1;
             } //If moving left
         }
-        self.setCursorX(pos);
+        try self.setCursorX(pos, gpa);
     }
 
     /// Moves the cursor's y position by some amount of steps. If the movement would cause the cursor to move off the screen, scroll
@@ -278,7 +286,7 @@ pub const text_buffer = struct {
             try self.screen.get(self.getScreenCursorY()).characters.insert(gpa, self.getScreenCursorX(), ch_ptr);
         }
 
-        self.moveCursorX(1);
+        try self.moveCursorX(1, gpa);
         return true;
     }
 
@@ -406,7 +414,7 @@ pub const text_buffer = struct {
     /// @param index the index of the logical line whose size in terminal lines we want to know
     /// @return the number of lines this logical line takes up
     fn logicalToTerminal(self: *text_buffer, index: usize) u32 {
-        return @max(1, (@as(u32, @intCast(self.scrollback.items[index].items.len + self.width - 1))) / self.width);
+        return @max(1, (@as(u32, @intCast(self.scrollback.items[index].items.len + self.width-1))) / self.width);
     }
 
     /// Helper function to get the logical line at the top of the current screen

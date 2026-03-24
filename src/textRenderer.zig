@@ -102,8 +102,7 @@ pub const renderer = struct {
     vao: u32,
     vbo: u32,
     ebo: u32,
-    foreground_shader: u32,
-    background_shader: u32,
+    shader: u32,
     projection: cglm.mat4 align(32),
 
     pub fn init(allocator: std.mem.Allocator, face: freetype.FT_Face, at: *?*atlas) !renderer {
@@ -123,13 +122,10 @@ pub const renderer = struct {
 
         const fg_shader = try s.loadShader("data/shaders/glyph.frag", "data/shaders/glyph.vert", allocator);
         glad.glUseProgram(fg_shader);
-        // const loc = glad.glGetUniformLocation(fg_shader, "text");
-        // glad.glUniform1i(loc, 0);
+        const loc = glad.glGetUniformLocation(fg_shader, "text");
+        glad.glUniform1i(loc, 0);
 
-        const bg_shader = try s.loadShader("data/shaders/bkgd.frag", "data/shaders/bkgd.vert", allocator);
-        glad.glUseProgram(bg_shader);
-
-        var r = renderer{.vao = vao, .vbo = vbo, .ebo = 0, .foreground_shader = fg_shader, .background_shader = bg_shader, .projection = undefined};
+        var r = renderer{.vao = vao, .vbo = vbo, .ebo = 0, .shader = fg_shader, .projection = undefined};
 
         cglm.glm_ortho(0.0, 800.0, 600.0, 0.0, -1.0, 1.0, &r.projection);
 
@@ -142,28 +138,39 @@ pub const renderer = struct {
     }
 
     pub fn renderTextBuffer(self: *renderer, tex_buf: *tb.text_buffer, at: *atlas) void {
-        s.use(self.foreground_shader);
-        glad.glUniform3f(glad.glGetUniformLocation(@intCast(self.foreground_shader), "textColor"), tex_buf.foregroundColour.x, tex_buf.foregroundColour.y, tex_buf.foregroundColour.z);
+        s.use(self.shader);
         glad.glActiveTexture(glad.GL_TEXTURE0);
         glad.glBindTexture(glad.GL_TEXTURE_2D, at.textureID);  // not self.screen_tex
         glad.glBindVertexArray(self.vao);
         glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.vbo);
-        const proj_loc = glad.glGetUniformLocation(self.foreground_shader, "projection");
+        const proj_loc = glad.glGetUniformLocation(self.shader, "projection");
         glad.glUniformMatrix4fv(proj_loc, 1, glad.GL_FALSE, @ptrCast(&self.projection));
 
         var x_cursor_pos: u16 = 0;
         var y_cursor_pos: u16 = 0;
 
-        for(0..tex_buf.screen.size) |i| {
+        for(0..tex_buf.screen.size+1) |i| {
+            if(i >= tex_buf.height) continue;
             x_cursor_pos = 0;
             const line = tex_buf.screen.get(@intCast(i));
-            for(0..line.characters.items.len) |j| {
-                const ch :u8 = line.characters.items[j].char;
+            const line_len = if(i < tex_buf.screen.size) line.characters.items.len else 0;
+            for(0..line_len+1) |j| {
+                // std.debug.print("Screen Cursor pos: ({}, {})", .{tex_buf.getScreenCursorX(), tex_buf.getScreenCursorY()});
+
+                if(j >= tex_buf.width) continue;
+                const ch :u8 = if(j < line_len) line.characters.items[j].char else 32;
 
                 const xpos: f32 = @as(f32, @floatFromInt(x_cursor_pos * at.cell_w));
                 const ypos: f32 = @as(f32, @floatFromInt(y_cursor_pos * at.cell_h));
                 const w: f32 = @as(f32, @floatFromInt(at.cell_w));
                 const h: f32 = @as(f32, @floatFromInt(at.cell_h));
+
+                const is_cursor = (i == tex_buf.getScreenCursorY() and j == tex_buf.getScreenCursorX());
+                const fg = if(is_cursor) tex_buf.backgroundColour else tex_buf.foregroundColour;
+                const bg = if(is_cursor) tex_buf.foregroundColour else tex_buf.backgroundColour;
+
+                glad.glUniform4f(glad.glGetUniformLocation(@intCast(self.shader), "bgColor"), bg.x, bg.y, bg.z, bg.w);
+                glad.glUniform4f(glad.glGetUniformLocation(@intCast(self.shader), "textColor"), fg.x, fg.y, fg.z, fg.w);
 
                 //Update vbo for each character
                 const uv = at.uvs[ch-32];
