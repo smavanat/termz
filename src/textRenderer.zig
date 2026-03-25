@@ -166,11 +166,11 @@ pub const renderer = struct {
                 const h: f32 = @as(f32, @floatFromInt(at.cell_h));
 
                 const is_cursor = (i == tex_buf.getScreenCursorY() and j == tex_buf.getScreenCursorX());
-                if(is_cursor) {
-                    std.debug.print("CursorX: {}\n", .{tex_buf.cursorX});
-                    std.debug.print("Screen CursorX: {}\n", .{tex_buf.getScreenCursorX()});
-                    std.debug.print("Screen CursorY: {}\n", .{tex_buf.getScreenCursorY()});
-                }
+                // if(is_cursor) {
+                //     std.debug.print("CursorX: {}\n", .{tex_buf.cursorX});
+                //     std.debug.print("Screen CursorX: {}\n", .{tex_buf.getScreenCursorX()});
+                //     std.debug.print("Screen CursorY: {}\n", .{tex_buf.getScreenCursorY()});
+                // }
                 const fg = if(is_cursor) tex_buf.backgroundColour else tex_buf.foregroundColour;
                 const bg = if(is_cursor) tex_buf.foregroundColour else tex_buf.backgroundColour;
 

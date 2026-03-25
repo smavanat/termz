@@ -132,7 +132,7 @@ pub const text_buffer = struct {
 
         //See how far up in the screen the cursor's logical line is
         while (logicalY >= self.cursorY) {
-            screenY -= self.logicalToTerminal(logicalY)-1;
+screenY -= self.logicalToTerminal(logicalY)-1;
             // if(logicalY <= self.cursorY or logicalY <= 0) break;
             if(logicalY <= 0) break;
             logicalY -= 1;
@@ -173,9 +173,6 @@ pub const text_buffer = struct {
     /// @param val the new x position to move the cursor to
     pub fn setCursorX(self: *text_buffer, val: u32, gpa: std.mem.Allocator) !void {
         self.cursorX = @max(0, @min(val, self.scrollback.items[self.cursorY].items.len));
-        // std.debug.print("CursorX: {}\n", .{self.cursorX});
-        // std.debug.print("Screen CursorX: {}\n", .{self.getScreenCursorX()});
-        // std.debug.print("Screen CursorY: {}\n", .{self.getScreenCursorY()});
         if(self.cursorY == self.scrollback.items.len-1 and self.bottomIndex == self.scrollback.items.len-1 and
             self.screen.get(@intCast(self.screen.size-1)).characters.items.len == self.width and
             self.cursorX != 0 and self.cursorX % self.width == 0) {
@@ -246,7 +243,7 @@ pub const text_buffer = struct {
         try self.rebuildScreen(gpa);
     }
 
-    /// Adds an empty line to the bottom of the screen and removes extra lines if we are over the scrollback buffer.
+    /// Adds an empty line to the bottom of the screen
     /// Moves the cursor down one line, scrolling if necessary
     pub fn createNewLine(self: *text_buffer, gpa: std.mem.Allocator) !bool {
         if (self.cursorY != self.scrollback.items.len - 1 or self.bottomIndex != self.scrollback.items.len - 1) return false; //Early exit when not at the bottom of the screen
@@ -299,7 +296,21 @@ pub const text_buffer = struct {
             try self.rebuildScreen(gpa);
         } //Need to shift the screen down
         else { //Otherwise just write to the screen as well
-            try self.screen.get(self.getScreenCursorY()).characters.insert(gpa, self.getScreenCursorX(), ch_ptr);
+            //If we are at the bottom screen line that this logical line occupies, just add the character in the right position
+            if(self.getScreenCursorY() >= self.screen.size-1 or !self.screen.get(self.getScreenCursorY()+1).wrapped) {
+                try self.screen.get(self.getScreenCursorY()).characters.insert(gpa, self.getScreenCursorX(), ch_ptr);
+            }
+            else {
+                //Otherwise we need to shift the characters in subsequent lines to make it look like the whole line is shifting
+                var line_y = self.getScreenCursorY();
+                while(line_y < self.screen.size-1 and self.screen.get(line_y+1).wrapped) {
+                    const screen_line = self.screen.get(line_y);
+                    try screen_line.characters.insert(gpa, self.getScreenCursorX(), ch_ptr);
+                    const end_char = screen_line.characters.orderedRemove(screen_line.characters.items.len-1);
+                    try self.screen.get(line_y+1).characters.insert(gpa, 0, end_char);
+                    line_y += 1;
+                }
+            }
         }
 
         try self.moveCursorX(1, gpa);
@@ -319,35 +330,21 @@ pub const text_buffer = struct {
 
         self.cursorX-=1; //Move the cursor back one space
 
-        // const deleted: character_cell = line.items[self.cursorX]; //Get the char to be deleted
-
-        // if(deleted.getTrailFlag() == TrailFlag.WIDE_END) { //If on second half of a wide char need to delete both halves
-        //     line.remove(cursorX-1);
-        //     line.remove(cursorX-1); //Calling it twice moves the second half back to the cursor's position
-        // }
-        // else if(deleted.getTrailFlag() == TrailFlag.WIDE_START) {
-        //     line.remove(cursorX);
-        //     line.remove(cursorX); //Calling it twice moves the second half back to the cursor's position
-        // }
-        // else {
-            _ = line.orderedRemove(self.cursorX);
-        // }
+        _ = line.orderedRemove(self.cursorX);
 
         if(oldLines != self.logicalToTerminal(self.cursorY)) {try self.rebuildScreen(gpa);} //Need to shift the screen down
         else {
             const screenLine: *terminal_line = self.screen.get(self.getScreenCursorY());
-            // if(deleted.getTrailFlag() == TrailFlag.WIDE_END) { //If on second half of a wide char need to delete both halves
-            //     cursorX--;
-            //     screenLine.remove(getScreenCursorX());
-            //     screenLine.remove(getScreenCursorX()); //Calling it twice moves the second half back to the cursor's position
-            // }
-            // else if(deleted.getTrailFlag() == TrailFlag.WIDE_START) {
-            //     screenLine.remove(getScreenCursorX());
-            //     screenLine.remove(getScreenCursorX()); //Calling it twice moves the second half back to the cursor's position
-            // }
-            // else {
-                _ = screenLine.characters.orderedRemove(self.getScreenCursorX());
-            // }
+            _ = screenLine.characters.orderedRemove(self.getScreenCursorX());
+
+            //Need to shift characters on subsequent wrapped lines
+            var line_y = self.getScreenCursorY();
+            while(line_y < self.screen.size-1 and self.screen.get(line_y+1).wrapped) {
+                const start_char = self.screen.get(line_y+1).characters.orderedRemove(0);
+                const screen_line = self.screen.get(line_y);
+                try screen_line.characters.insert(gpa, screenLine.characters.items.len-1, start_char);
+                line_y += 1;
+            }
         }
 
         return true;

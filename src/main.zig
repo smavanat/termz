@@ -18,8 +18,9 @@ var text_buf: *tb.text_buffer = undefined;
 var atls: ?*tr.atlas = null;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-//TODO: FIX ADDING/DELETING A CHARACTER IN THE MIDDLE OF A LINE
-//      TALK TO PSEUDOTERMINAL
+//TODO: TALK TO PSEUDOTERMINAL
+
+//BUG: WHEN DELETING A CHARACTER FROM A LINE THAT WRAPS OFF OF THE BOTTOM OF THE SCREEN, FRESH CHARACTERS WILL NOT BE PULLED IN
 
 fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) callconv(.c) void {
     if(glad.glad_glViewport) |glViewport|{
