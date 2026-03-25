@@ -23,9 +23,11 @@ var atls: ?*tr.atlas = null;
 var pts: *pty.PTY = undefined;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-//TODO: TALK TO PSEUDOTERMINAL
+//TODO: PARSE UNICODE
+//      PARSE ANSI CODES
 
 //BUG: WHEN DELETING A CHARACTER FROM A LINE THAT WRAPS OFF OF THE BOTTOM OF THE SCREEN, FRESH CHARACTERS WILL NOT BE PULLED IN
+//     CURSOR CAN MOVE AND DELETE '$ ' WHEN ON UNWRAPPED LINE.
 
 fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) callconv(.c) void {
     if(glad.glad_glViewport) |glViewport|{
@@ -168,7 +170,7 @@ pub fn main() !void {
             }
 
             //Setting the background colour to be black
-            glad.glClearColor(1.0, 1.0, 1.0, 1.0);
+            glad.glClearColor(text_buf.backgroundColour.x, text_buf.backgroundColour.y, text_buf.backgroundColour.z, text_buf.backgroundColour.w);
             glad.glClear(glad.GL_COLOR_BUFFER_BIT);
 
             tRenderer.renderTextBuffer(text_buf, atls.?);

@@ -93,10 +93,10 @@ pub const text_buffer = struct {
         try s_ptr.addToFront(init_tline, gpa);
 
         const bc_ptr = try gpa.create(mu.vec4);
-        bc_ptr.* = mu.vec4.init(1.0, 1.0, 1.0, 1.0);
+        bc_ptr.* = mu.vec4.init(0.0, 0.0, 0.0, 1.0);
 
         const fc_ptr = try gpa.create(mu.vec4);
-        fc_ptr.* = mu.vec4.init(0.0, 0.0, 0.0, 1.0);
+        fc_ptr.* = mu.vec4.init(1.0, 1.0, 1.0, 1.0);
 
         return text_buffer{ .width = w, .height = h, .cursorX = 0, .cursorY = 0, .bottomIndex = 0, .backgroundColour = bc_ptr, .foregroundColour = fc_ptr, .scrollback = sb_ptr, .screen = s_ptr };
     }
