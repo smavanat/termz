@@ -6,6 +6,7 @@ const imports = @import("imports.zig");
 const tr = imports.termz_core.tr;
 const tb = imports.termz_core.tb;
 const in = imports.termz_core.in;
+const pty = imports.termz_core.pty;
 
 const glfw = imports.termz_c_externals.glfw;
 const glad = imports.termz_c_externals.glad;
@@ -16,6 +17,7 @@ var gw: ?*glfw.GLFWwindow = null;
 var tRenderer: tr.renderer = undefined;
 var text_buf: *tb.text_buffer = undefined;
 var atls: ?*tr.atlas = null;
+var pts: *pty.PTY = undefined;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 //TODO: TALK TO PSEUDOTERMINAL
@@ -95,11 +97,19 @@ fn init(window: *?*glfw.GLFWwindow) bool {
 
     _ = freetype.FT_Set_Pixel_Sizes(face, 0, 24); //Setting the pixel font size we would like to get from the face
 
+    //Initialising the text renderer
     tRenderer = tr.renderer.init(gpa.allocator(), face, &atls) catch return false;
+
+    //Setting up the pseudoterminal
+    pts = gpa.allocator().create(pty.PTY) catch return false;
+    pts.* = pty.PTY.init();
+    if(!pts.pt_pair()) return false;
+    if(!pts.set_term_size(@intCast(800/atls.?.*.cell_w), @intCast(600/atls.?.*.cell_h), 800, 600)) return false;
+    if(!pts.spawn()) return false;
+
+    //Setting up the text buffer
     text_buf = gpa.allocator().create(tb.text_buffer) catch return false;
     text_buf.* = tb.text_buffer.init(800/atls.?.*.cell_w, 600/atls.?.*.cell_h, gpa.allocator()) catch return false;
-
-    text_buf.printScreenContents();
 
     //Freeing freetype's resources
     _ = freetype.FT_Done_Face(face);
@@ -139,6 +149,8 @@ pub fn main() !void {
 
         atls.?.deinit(gpa.allocator());
         gpa.allocator().destroy(atls.?);
+
+        gpa.allocator().destroy(pts);
 
         _ = gpa.deinit();
     }

@@ -25,6 +25,7 @@ pub const termz_core = struct {
     pub const mu = lmu;
     /// Import for input.zig
     pub const in = lin;
+    pub const pty = @import("pty.zig");
 };
 
 const lglad = @cImport({@cInclude("glad/glad.h");});
@@ -42,3 +43,12 @@ pub const termz_c_externals = struct {
     /// Import for glfw
     pub const glfw = lglfw;
 };
+
+pub const termz_c = @cImport({
+// @cDefine("_XOPEN_SOURCE", "600");
+    @cInclude("stdio.h");
+    @cInclude("stdlib.h");
+    @cInclude("fcntl.h");
+    @cInclude("sys/ioctl.h");
+    @cInclude("unistd.h");
+});
