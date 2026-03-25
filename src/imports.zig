@@ -42,6 +42,7 @@ pub const termz_c_externals = struct {
     pub const freetype = lfreetype;
     /// Import for glfw
     pub const glfw = lglfw;
+    pub const utils = @cImport(@cInclude("utils/utils.h"));
 };
 
 pub const termz_c = @cImport({
@@ -51,4 +52,6 @@ pub const termz_c = @cImport({
     @cInclude("fcntl.h");
     @cInclude("sys/ioctl.h");
     @cInclude("unistd.h");
+    @cInclude("errno.h");
+    @cInclude("termios.h");
 });

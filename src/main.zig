@@ -12,6 +12,9 @@ const glfw = imports.termz_c_externals.glfw;
 const glad = imports.termz_c_externals.glad;
 const freetype = imports.termz_c_externals.freetype;
 const cglm = imports.termz_c_externals.cglm;
+const utils = imports.termz_c_externals.utils;
+
+const termz_c = imports.termz_c;
 
 var gw: ?*glfw.GLFWwindow = null;
 var tRenderer: tr.renderer = undefined;
@@ -43,7 +46,7 @@ fn charCallback(window: ?*glfw.GLFWwindow, codepoint: u32) callconv(.c) void {
 
 fn keyCallback(window: ?*glfw.GLFWwindow, key: i32, scancode: i32, action: i32, mods: i32) callconv(.c) void {
     if(action == glfw.GLFW_PRESS or action == glfw.GLFW_REPEAT)
-        in.keyCallback(text_buf, key, gpa.allocator());
+        in.keyCallback(text_buf, pts, key, gpa.allocator());
 
     _ = window;
     _ = scancode;
@@ -126,10 +129,44 @@ fn checkGLError(label: []const u8) void {
     }
 }
 
+pub fn getErrno() i32 {
+    return termz_c.__errno_location().*;
+}
+
 pub fn main() !void {
     if(init(&gw)) {
         std.debug.print("Initialised\n", .{});
+
+        _=termz_c.fcntl(pts.master, termz_c.F_SETFL, termz_c.O_NONBLOCK);
+
         while(glfw.glfwWindowShouldClose(gw) == 0) {
+            var buf = std.mem.zeroes([256]u8);
+            const n = termz_c.read(pts.master, &buf[0], buf.len);
+            if(n > 0) {
+                for(buf[0..@intCast(n)]) |b| {
+                    if(b != 0) {
+                        if(b == '\r') {
+                            try text_buf.setCursorX(0, gpa.allocator());
+                        }
+                        else {
+                            if(b != '\n') {
+                                _=try text_buf.insertText(b, gpa.allocator());
+                            }
+                            else if(text_buf.getScreenCursorX() != 0 or !text_buf.screen.get(text_buf.screen.size-1).wrapped){
+                                _=try text_buf.createNewLine(gpa.allocator());
+                            }
+                        }
+                    }
+                }
+            }
+            else if(n < 0) {
+                const err = getErrno();
+                if(err != termz_c.EAGAIN) {
+                    std.debug.print("Read error: {}\n", .{err});
+                    break;
+                }
+            }
+
             //Setting the background colour to be black
             glad.glClearColor(1.0, 1.0, 1.0, 1.0);
             glad.glClear(glad.GL_COLOR_BUFFER_BIT);
@@ -138,7 +175,8 @@ pub fn main() !void {
 
             //check and call events and swap the buffers
             glfw.glfwSwapBuffers(gw);
-            glfw.glfwWaitEvents(); //Wait until something actually happens
+            // glfw.glfwWaitEvents(); //Wait until something actually happens
+            glfw.glfwPollEvents();
         }
 
         glfw.glfwTerminate();

@@ -159,6 +159,7 @@ pub const renderer = struct {
 
                 if(j >= tex_buf.width) continue;
                 const ch :u8 = if(j < line_len) line.characters.items[j].char else 32;
+                if (ch < 32 or ch > 126) continue;
 
                 const xpos: f32 = @as(f32, @floatFromInt(x_cursor_pos * at.cell_w));
                 const ypos: f32 = @as(f32, @floatFromInt(y_cursor_pos * at.cell_h));
@@ -166,11 +167,6 @@ pub const renderer = struct {
                 const h: f32 = @as(f32, @floatFromInt(at.cell_h));
 
                 const is_cursor = (i == tex_buf.getScreenCursorY() and j == tex_buf.getScreenCursorX());
-                // if(is_cursor) {
-                //     std.debug.print("CursorX: {}\n", .{tex_buf.cursorX});
-                //     std.debug.print("Screen CursorX: {}\n", .{tex_buf.getScreenCursorX()});
-                //     std.debug.print("Screen CursorY: {}\n", .{tex_buf.getScreenCursorY()});
-                // }
                 const fg = if(is_cursor) tex_buf.backgroundColour else tex_buf.foregroundColour;
                 const bg = if(is_cursor) tex_buf.foregroundColour else tex_buf.backgroundColour;
 

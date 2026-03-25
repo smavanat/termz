@@ -2,6 +2,8 @@ const std = @import("std");
 const imports = @import("imports.zig");
 const ca = imports.termz_core.ca;
 const mu = imports.termz_core.mu;
+const pty = imports.termz_core.pty;
+const termz_c = imports.termz_c;
 
 /// Style flags for a character
 pub const Style = enum(u4) { BOLD, ITALIC, UNDERLINE, NUM_STYLES };
@@ -348,6 +350,26 @@ screenY -= self.logicalToTerminal(logicalY)-1;
         }
 
         return true;
+    }
+
+    // =============== PTY FUNCTIONS =================
+
+    pub fn writeToPTY(self: *text_buffer, pts: *pty.PTY, gpa: std.mem.Allocator) void {
+        const line = self.scrollback.items[self.cursorY];
+
+        if(line.items.len > 2) {
+            std.debug.print("Writing {} bytes to PTY\n", .{line.items.len-2});
+            var charBuf: []u8 = gpa.alloc(u8, line.items.len-2) catch return;
+            @memset(charBuf, 0);
+            for(2..line.items.len) |i|{
+                charBuf[i-2] = line.items[i].char;
+            }
+            const n = termz_c.write(pts.master, @ptrCast(&charBuf[0]), line.items.len-2);
+            std.debug.print("Wrote {} bytes\n", .{n});
+            gpa.free(charBuf);
+        }
+        const n2 = termz_c.write(pts.master, "\n", 1);
+        std.debug.print("Wrote newline: {}\n", .{n2});
     }
 
     // =============== DEBUG FUNCTIONS ==================
