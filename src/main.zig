@@ -18,6 +18,9 @@ var text_buf: *tb.text_buffer = undefined;
 var atls: ?*tr.atlas = null;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
+//TODO: FIX ADDING/DELETING A CHARACTER IN THE MIDDLE OF A LINE
+//      TALK TO PSEUDOTERMINAL
+
 fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) callconv(.c) void {
     if(glad.glad_glViewport) |glViewport|{
         glViewport(0, 0, width, height);

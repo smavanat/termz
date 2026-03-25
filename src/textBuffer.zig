@@ -131,13 +131,24 @@ pub const text_buffer = struct {
         var logicalY: u32 = self.bottomIndex;
 
         //See how far up in the screen the cursor's logical line is
-        while (logicalY != self.cursorY) {
-            screenY -= self.logicalToTerminal(logicalY);
-            if(logicalY == 0) break;
+        while (logicalY >= self.cursorY) {
+            screenY -= self.logicalToTerminal(logicalY)-1;
+            // if(logicalY <= self.cursorY or logicalY <= 0) break;
+            if(logicalY <= 0) break;
             logicalY -= 1;
         }
 
-        // if(screenY == 0) screenY += self.logicalToTerminal(logicalY)-1;
+        // Add how far into the cursor line's wrapped segments we are
+        const lineLen = self.scrollback.items[self.cursorY].items.len;
+        const wrappedRow = if (lineLen > 0 and self.cursorX == lineLen and self.cursorX % self.width == 0)
+            self.cursorX / self.width - 1  // exactly at a boundary, still on the row above
+        else
+            self.cursorX / self.width;
+
+        screenY += wrappedRow;
+        // Add how far into the cursor line's wrapped segments we are
+        // screenY += self.cursorX / self.width;
+
         return @max(0, @min(screenY, self.height - 1)); //Clamp the value
     }
 
@@ -162,7 +173,12 @@ pub const text_buffer = struct {
     /// @param val the new x position to move the cursor to
     pub fn setCursorX(self: *text_buffer, val: u32, gpa: std.mem.Allocator) !void {
         self.cursorX = @max(0, @min(val, self.scrollback.items[self.cursorY].items.len));
-        if(self.cursorX != 0 and self.cursorX % self.width == 0) {
+        // std.debug.print("CursorX: {}\n", .{self.cursorX});
+        // std.debug.print("Screen CursorX: {}\n", .{self.getScreenCursorX()});
+        // std.debug.print("Screen CursorY: {}\n", .{self.getScreenCursorY()});
+        if(self.cursorY == self.scrollback.items.len-1 and self.bottomIndex == self.scrollback.items.len-1 and
+            self.screen.get(@intCast(self.screen.size-1)).characters.items.len == self.width and
+            self.cursorX != 0 and self.cursorX % self.width == 0) {
             if(self.screen.size == self.height) {
                 try self.scroll(1, gpa);
             }
@@ -298,7 +314,8 @@ pub const text_buffer = struct {
         if(self.cursorY != self.scrollback.items.len-1 or self.bottomIndex != self.scrollback.items.len-1 or self.cursorX <= 0) return false;
 
         const line: *std.ArrayList(character_cell)= self.scrollback.items[self.cursorY];
-        const oldLines: u32 = self.logicalToTerminal(self.cursorY);
+        var oldLines: u32 = self.logicalToTerminal(self.cursorY);
+        if(self.cursorX != 0 and self.cursorX % self.width == 0) oldLines += 1; //Technically if the cursor wraps around to a new line the line takes up an extra screen line
 
         self.cursorX-=1; //Move the cursor back one space
 
@@ -421,7 +438,7 @@ pub const text_buffer = struct {
     /// @return the index of the logical line at the top of the screen
     fn getLogicalScreenTop(self: *text_buffer) u32 {
         var screenTop: u32 = self.bottomIndex; //The logical line at the top of the screen
-        var remainingRows: usize = self.screen.items.len - 1; //Number of rows we haven't seen to be filled by a logical line in the screen
+        var remainingRows: usize = self.screen.size - 1; //Number of rows we haven't seen to be filled by a logical line in the screen
 
         while (screenTop > 0 and remainingRows > 0) {
             remainingRows -= self.logicalToTerminal(screenTop); //Otherwise decrease the number of remaining unfilled rows on the screen
