@@ -3,7 +3,6 @@ const imports = @import("imports.zig");
 const ca = imports.termz_core.ca;
 const mu = imports.termz_core.mu;
 const pty = imports.termz_core.pty;
-const termz_c = imports.termz_c;
 
 /// Style flags for a character
 pub const Style = enum(u4) { BOLD, ITALIC, UNDERLINE, NUM_STYLES };
@@ -364,11 +363,11 @@ screenY -= self.logicalToTerminal(logicalY)-1;
             for(2..line.items.len) |i|{
                 charBuf[i-2] = line.items[i].char;
             }
-            const n = termz_c.write(pts.master, @ptrCast(&charBuf[0]), line.items.len-2);
+            const n = std.os.linux.write(pts.master, @ptrCast(&charBuf[0]), line.items.len-2);
             std.debug.print("Wrote {} bytes\n", .{n});
             gpa.free(charBuf);
         }
-        const n2 = termz_c.write(pts.master, "\n", 1);
+        const n2 = std.os.linux.write(pts.master, "\n", 1);
         std.debug.print("Wrote newline: {}\n", .{n2});
     }
 

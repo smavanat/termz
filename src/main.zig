@@ -1,5 +1,4 @@
 const std = @import("std");
-const termz = @import("termz");
 const builtin = @import("builtin");
 const imports = @import("imports.zig");
 
@@ -69,7 +68,6 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     window.* = glfw.glfwCreateWindow(800, 600, "termz", null, null);
     if(window.* == null) {
         std.debug.print("Failed to create a GLFW window", .{});
-        termz.bufferedPrint() catch return false;
         glfw.glfwTerminate();
         return false;
     }
@@ -139,7 +137,7 @@ pub fn main() !void {
     if(init(&gw)) {
         std.debug.print("Initialised\n", .{});
 
-        _=termz_c.fcntl(pts.master, termz_c.F_SETFL, termz_c.O_NONBLOCK);
+        _=std.os.linux.fcntl(pts.master, termz_c.F_SETFL, termz_c.O_NONBLOCK);
 
         while(glfw.glfwWindowShouldClose(gw) == 0) {
             var buf = std.mem.zeroes([256]u8);

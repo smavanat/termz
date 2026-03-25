@@ -22,7 +22,7 @@ pub const PTY = struct {
     pub fn set_term_size(self: *PTY, width: u16, height: u16, pixelW: u16, pixelH: u16) bool {
         const ws: termz_c.winsize = .{.ws_row = height, .ws_col = width, .ws_xpixel = pixelW, .ws_ypixel = pixelH};
 
-        if(termz_c.ioctl(self.master, termz_c.TIOCSWINSZ, @intFromPtr(&ws)) == -1) {
+        if(std.os.linux.ioctl(self.master, termz_c.TIOCSWINSZ, @intFromPtr(&ws)) == -1) {
             std.debug.print("error: ioctl(TIOCSWINSZ)", .{});
             return false;
         }
@@ -73,25 +73,25 @@ pub const PTY = struct {
         const p_id: i32 = termz_c.fork();
 
         if(p_id == 0) {
-            _ = termz_c.close(self.master);
-            _ = termz_c.setsid();
-            _ = termz_c.ioctl(self.slave, termz_c.TIOCSCTTY, @as(c_int, 0));
-            _ = termz_c.dup2(self.slave, 0);
-            _ = termz_c.dup2(self.slave, 1);
-            _ = termz_c.dup2(self.slave, 2);
-            if (self.slave > 2) _ = termz_c.close(self.slave);
+            _ = std.os.linux.close(self.master);
+            _ = std.os.linux.setsid();
+            _ = std.os.linux.ioctl(self.slave, termz_c.TIOCSCTTY, @as(c_int, 0));
+            _ = std.os.linux.dup2(self.slave, 0);
+            _ = std.os.linux.dup2(self.slave, 1);
+            _ = std.os.linux.dup2(self.slave, 2);
+            if (self.slave > 2) _ = std.os.linux.close(self.slave);
 
             const args = [_:null][*c]const u8{ "-" ++ SHELL, null };
             const env = [_:null][*c]const u8{ "TERM=dumb", "PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/root", null };
-            _ = termz_c.execve(SHELL, @ptrCast(&args), @ptrCast(&env));
+            _ = std.os.linux.execve(SHELL, @ptrCast(&args), @ptrCast(&env));
 
             // If we get here execve failed
             const fail_msg = "execve failed\n";
-            _ = termz_c.write(2, fail_msg, fail_msg.len);
-            termz_c.exit(1);
+            _ = std.os.linux.write(2, fail_msg, fail_msg.len);
+            std.os.linux.exit(1);
         }
         else if(p_id > 0) {
-            _ = termz_c.close(self.slave);
+            _ = std.os.linux.close(self.slave);
             return true;
         }
 
