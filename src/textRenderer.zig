@@ -7,7 +7,6 @@ const tb = imports.termz_core.tb;
 
 const glad = imports.termz_c_externals.glad;
 const freetype = imports.termz_c_externals.freetype;
-const cglm = imports.termz_c_externals.cglm;
 
 pub const atlas = struct {
     cols: u32,
@@ -103,7 +102,7 @@ pub const renderer = struct {
     vbo: u32,
     ebo: u32,
     shader: u32,
-    projection: cglm.mat4 align(32),
+    projection: mu.mat4,
 
     pub fn init(allocator: std.mem.Allocator, face: freetype.FT_Face, at: *?*atlas) !renderer {
         //Generating the buffers
@@ -127,7 +126,7 @@ pub const renderer = struct {
 
         var r = renderer{.vao = vao, .vbo = vbo, .ebo = 0, .shader = fg_shader, .projection = undefined};
 
-        cglm.glm_ortho(0.0, 800.0, 600.0, 0.0, -1.0, 1.0, &r.projection);
+        mu.ortho(0.0, 800.0, 600.0, 0.0, -1.0, 1.0, &r.projection);
 
         glad.glEnable(glad.GL_BLEND);
         glad.glBlendFunc(glad.GL_SRC_ALPHA, glad.GL_ONE_MINUS_SRC_ALPHA);

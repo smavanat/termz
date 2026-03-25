@@ -6,11 +6,11 @@ const tr = imports.termz_core.tr;
 const tb = imports.termz_core.tb;
 const in = imports.termz_core.in;
 const pty = imports.termz_core.pty;
+const m = imports.termz_core.mu;
 
 const glfw = imports.termz_c_externals.glfw;
 const glad = imports.termz_c_externals.glad;
 const freetype = imports.termz_c_externals.freetype;
-const cglm = imports.termz_c_externals.cglm;
 const utils = imports.termz_c_externals.utils;
 
 const termz_c = imports.termz_c;
@@ -22,7 +22,8 @@ var atls: ?*tr.atlas = null;
 var pts: *pty.PTY = undefined;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-//TODO: PARSE UNICODE
+//TODO: GET RID OF CGLM
+//      PARSE UNICODE
 //      PARSE ANSI CODES
 
 //BUG: WHEN DELETING A CHARACTER FROM A LINE THAT WRAPS OFF OF THE BOTTOM OF THE SCREEN, FRESH CHARACTERS WILL NOT BE PULLED IN
@@ -31,8 +32,8 @@ var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) callconv(.c) void {
     if(glad.glad_glViewport) |glViewport|{
         glViewport(0, 0, width, height);
-        var proj: cglm.mat4 align(32) = undefined;
-        cglm.glm_ortho(0.0, @floatFromInt(width), @floatFromInt(height), 0.0, -1.0, 1.0, &proj);
+        var proj: m.mat4 = undefined;
+        m.ortho(0.0, @floatFromInt(width), @floatFromInt(height), 0.0, -1.0, 1.0, &proj);
         tRenderer.projection = proj;
     }
 

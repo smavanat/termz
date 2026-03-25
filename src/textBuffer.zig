@@ -133,7 +133,7 @@ pub const text_buffer = struct {
 
         //See how far up in the screen the cursor's logical line is
         while (logicalY >= self.cursorY) {
-screenY -= self.logicalToTerminal(logicalY)-1;
+            screenY -= self.logicalToTerminal(logicalY)-1;
             // if(logicalY <= self.cursorY or logicalY <= 0) break;
             if(logicalY <= 0) break;
             logicalY -= 1;
