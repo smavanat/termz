@@ -40,16 +40,12 @@ pub const character_cell = struct {
 /// Stores both its CharacterCell string and whether it wraps from the previous line
 const terminal_line = struct {
     characters: *std.ArrayList(character_cell),
-    width: u32,
+    width: u32, //TODO: Get rid of
     wrapped: bool,
 
     pub fn init(width: u32, wrap: bool, gpa: std.mem.Allocator) !terminal_line {
         const ch_ptr = try gpa.create(std.ArrayList(character_cell));
         ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
-        // if(!wrap) {
-        //     try ch_ptr.append(gpa, try character_cell.init('$'));
-        //     try ch_ptr.append(gpa, try character_cell.init(' '));
-        // }
         return terminal_line{ .characters = ch_ptr, .width = width, .wrapped = wrap };
     }
 
@@ -57,6 +53,21 @@ const terminal_line = struct {
         self.characters.deinit(gpa);
         // gpa.free(self);
         gpa.destroy(self.characters);
+    }
+};
+
+const scroll_line = struct {
+    characters: *std.ArrayList(character_cell),
+    minXPos: u32,
+
+    pub fn init(width: u32, gpa: std.mem.Allocator) !scroll_line {
+        const ch_ptr = try gpa.create(std.ArrayList(character_cell));
+        ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
+        return scroll_line{.characters = ch_ptr, .minXPos = 2};
+    }
+
+    pub fn deinit(self: *scroll_line, gpa: std.mem.Allocator) void {
+        self.characters.deinit(gpa);
     }
 };
 
@@ -71,15 +82,15 @@ pub const text_buffer = struct {
     bottomIndex: u32,
     backgroundColour: *mu.vec4,
     foregroundColour: *mu.vec4,
-    scrollback: *std.ArrayList(*std.ArrayList(character_cell)),
+    scrollback: *std.ArrayList(*scroll_line),
     screen: *ca.CircularArray(*terminal_line, null),
 
     pub fn init(w: u32, h: u32, gpa: std.mem.Allocator) !text_buffer {
-        const sb_ptr = try gpa.create(std.ArrayList(*std.ArrayList(character_cell)));
-        sb_ptr.* = try std.ArrayList(*std.ArrayList(character_cell)).initCapacity(gpa, h * 2);
+        const sb_ptr = try gpa.create(std.ArrayList(*scroll_line));
+        sb_ptr.* = try std.ArrayList(*scroll_line).initCapacity(gpa, h * 2);
 
-        const init_line = try gpa.create(std.ArrayList(character_cell));
-        init_line.* = try std.ArrayList(character_cell).initCapacity(gpa, w);
+        const init_line = try gpa.create(scroll_line);
+        init_line.* = try scroll_line.init(w, gpa);
 
         try sb_ptr.*.append(gpa, init_line);
 
@@ -140,7 +151,7 @@ pub const text_buffer = struct {
         }
 
         // Add how far into the cursor line's wrapped segments we are
-        const lineLen = self.scrollback.items[self.cursorY].items.len;
+        const lineLen = self.scrollback.items[self.cursorY].characters.items.len;
         const wrappedRow = if (lineLen > 0 and self.cursorX == lineLen and self.cursorX % self.width == 0)
             self.cursorX / self.width - 1  // exactly at a boundary, still on the row above
         else
@@ -173,7 +184,7 @@ pub const text_buffer = struct {
     /// If the cursor ends at a cell with {@link TrailFlag} WIDE_END, move one cell to the left
     /// @param val the new x position to move the cursor to
     pub fn setCursorX(self: *text_buffer, val: u32, gpa: std.mem.Allocator) !void {
-        self.cursorX = @max(0, @min(val, self.scrollback.items[self.cursorY].items.len));
+        self.cursorX = @max(0, @min(val, self.scrollback.items[self.cursorY].characters.items.len));
         if(self.cursorY == self.scrollback.items.len-1 and self.bottomIndex == self.scrollback.items.len-1 and
             self.screen.get(@intCast(self.screen.size-1)).characters.items.len == self.width and
             self.cursorX != 0 and self.cursorX % self.width == 0) {
@@ -185,7 +196,7 @@ pub const text_buffer = struct {
             try self.screen.addToBack(tline_ptr, gpa);
         }
 
-        if (self.cursorX > 0 and self.cursorX < self.scrollback.items[self.cursorY].items.len and self.scrollback.items[self.cursorY].items[self.cursorX].trailFlag == TrailFlag.WIDE_END) //Cursor can never land on the end of a wide character
+        if (self.cursorX > 0 and self.cursorX < self.scrollback.items[self.cursorY].characters.items.len and self.scrollback.items[self.cursorY].characters.items[self.cursorX].trailFlag == TrailFlag.WIDE_END) //Cursor can never land on the end of a wide character
             self.cursorX -= 1;
     }
 
@@ -203,7 +214,7 @@ pub const text_buffer = struct {
         }
 
         self.cursorY = @intCast(clampedVal);
-        try self.setCursorX(@min(self.cursorX, self.scrollback.items[self.cursorY].items.len), gpa); //Setting the x position so that its at not off the end of the line we moved to
+        try self.setCursorX(@min(self.cursorX, self.scrollback.items[self.cursorY].characters.items.len), gpa); //Setting the x position so that its at not off the end of the line we moved to
     }
 
     /// Moves the cursor's x position by some amount of steps. Negative values move to the left, positive values move to the right.
@@ -213,10 +224,10 @@ pub const text_buffer = struct {
     pub fn moveCursorX(self: *text_buffer, val: i32, gpa: std.mem.Allocator) !void {
         var pos: u32 = @intCast(@max(0, val + @as(i32, @intCast(self.cursorX))));
 
-        const line: *std.ArrayList(character_cell) = self.scrollback.items[self.cursorY];
+        const line: *scroll_line = self.scrollback.items[self.cursorY];
         //If we are moving to an empty flag, skip it
-        if (pos > 0 and pos < line.items.len and line.items[pos].trailFlag == TrailFlag.WIDE_END) {
-            if (pos < line.items.len and val > 0) {
+        if (pos > 0 and pos < line.characters.items.len and line.characters.items[pos].trailFlag == TrailFlag.WIDE_END) {
+            if (pos < line.characters.items.len and val > 0) {
                 pos += 1;
             } //If moving right
             else if (pos > 0 and val < 0) {
@@ -285,13 +296,13 @@ pub const text_buffer = struct {
     /// @param text the new character to add
     /// @return true if the text was inserted, false if the cursor is not at the bottom line
     pub fn insertText(self: *text_buffer, text: u8, gpa: std.mem.Allocator) !bool {
+        const line: *scroll_line = self.scrollback.items[self.cursorY];
         if (self.cursorY != self.scrollback.items.len - 1 or self.bottomIndex != self.scrollback.items.len - 1) return false;
 
-        const line: *std.ArrayList(character_cell) = self.scrollback.items[self.cursorY];
         const oldLines: u32 = self.logicalToTerminal(self.cursorY);
 
         const ch_ptr = try character_cell.init(text);
-        try line.insert(gpa, self.cursorX, ch_ptr);
+        try line.characters.insert(gpa, self.cursorX, ch_ptr);
 
         if (oldLines < self.logicalToTerminal(self.cursorY)) {
             try self.rebuildScreen(gpa);
@@ -323,15 +334,16 @@ pub const text_buffer = struct {
     /// @param gpa the allocator to use to allocate new screen data if necessary
     /// @return true on successful removal, false if it is not at the bottom line in the scrollback or if there is no char to erase
     pub fn deleteText(self: *text_buffer, gpa: std.mem.Allocator) !bool {
-        if(self.cursorY != self.scrollback.items.len-1 or self.bottomIndex != self.scrollback.items.len-1 or self.cursorX <= 0) return false;
+        const line: *scroll_line = self.scrollback.items[self.cursorY];
+        if(self.cursorY != self.scrollback.items.len-1 or self.bottomIndex != self.scrollback.items.len-1 or self.cursorX <= 0
+            or self.cursorX <= line.minXPos) return false;
 
-        const line: *std.ArrayList(character_cell)= self.scrollback.items[self.cursorY];
         var oldLines: u32 = self.logicalToTerminal(self.cursorY);
         if(self.cursorX != 0 and self.cursorX % self.width == 0) oldLines += 1; //Technically if the cursor wraps around to a new line the line takes up an extra screen line
 
         self.cursorX-=1; //Move the cursor back one space
 
-        _ = line.orderedRemove(self.cursorX);
+        _ = line.characters.orderedRemove(self.cursorX);
 
         if(oldLines != self.logicalToTerminal(self.cursorY)) {try self.rebuildScreen(gpa);} //Need to shift the screen down
         else {
@@ -354,16 +366,16 @@ pub const text_buffer = struct {
     // =============== PTY FUNCTIONS =================
 
     pub fn writeToPTY(self: *text_buffer, pts: *pty.PTY, gpa: std.mem.Allocator) void {
-        const line = self.scrollback.items[self.cursorY];
+        const line: *scroll_line = self.scrollback.items[self.cursorY];
 
-        if(line.items.len > 2) {
-            std.debug.print("Writing {} bytes to PTY\n", .{line.items.len-2});
-            var charBuf: []u8 = gpa.alloc(u8, line.items.len-2) catch return;
+        if(line.characters.items.len > line.minXPos) {
+            std.debug.print("Writing {} bytes to PTY\n", .{line.characters.items.len-line.minXPos});
+            var charBuf: []u8 = gpa.alloc(u8, line.characters.items.len-line.minXPos) catch return;
             @memset(charBuf, 0);
-            for(2..line.items.len) |i|{
-                charBuf[i-2] = line.items[i].char;
+            for(line.minXPos..line.characters.items.len) |i|{
+                charBuf[i-line.minXPos] = line.characters.items[i].char;
             }
-            const n = std.os.linux.write(pts.master, @ptrCast(&charBuf[0]), line.items.len-2);
+            const n = std.os.linux.write(pts.master, @ptrCast(&charBuf[0]), line.characters.items.len-line.minXPos);
             std.debug.print("Wrote {} bytes\n", .{n});
             gpa.free(charBuf);
         }
@@ -398,7 +410,7 @@ pub const text_buffer = struct {
         const start: u32 = @max(0, @as(i32, @intCast(self.bottomIndex)) - @as(i32, @intCast(self.height)) + 1); //Get the top of the new screen
 
         for (start..self.bottomIndex + 1) |i| {
-            try self.wrapLogicalLine(self.scrollback.items[i], gpa); //Wrap the line so it fits the current screen width
+            try self.wrapLogicalLine(self.scrollback.items[i].characters, gpa); //Wrap the line so it fits the current screen width
         }
     }
 
@@ -438,8 +450,8 @@ pub const text_buffer = struct {
     /// Adds an empty line to the bottom of the screen and removes extra lines if we are over the scrollback buffer
     /// Does not move the screen contents
     fn addNewLine(self: *text_buffer, gpa: std.mem.Allocator) !void {
-        const nline_ptr = try gpa.create(std.ArrayList(character_cell));
-        nline_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, self.width);
+        const nline_ptr = try gpa.create(scroll_line);
+        nline_ptr.* = try scroll_line.init(self.width, gpa);
         try self.scrollback.append(gpa, nline_ptr);
         try self.moveCursorY(1, gpa);
         self.cursorX = 0;
@@ -449,7 +461,7 @@ pub const text_buffer = struct {
     /// @param index the index of the logical line whose size in terminal lines we want to know
     /// @return the number of lines this logical line takes up
     fn logicalToTerminal(self: *text_buffer, index: usize) u32 {
-        return @max(1, (@as(u32, @intCast(self.scrollback.items[index].items.len + self.width-1))) / self.width);
+        return @max(1, (@as(u32, @intCast(self.scrollback.items[index].characters.items.len + self.width-1))) / self.width);
     }
 
     /// Helper function to get the logical line at the top of the current screen

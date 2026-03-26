@@ -22,12 +22,14 @@ var atls: ?*tr.atlas = null;
 var pts: *pty.PTY = undefined;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-//TODO: GET RID OF CGLM
-//      PARSE UNICODE
+//TODO: PARSE UNICODE
 //      PARSE ANSI CODES
+//      SYNTAX HIGHLIGHTING
+//      CROSS PLATFORM SUPPORT
+//      CLIPBOARD SUPPORT
+//      MAKE THE minXPos PROPERTY ACTUALLY USABLE
 
 //BUG: WHEN DELETING A CHARACTER FROM A LINE THAT WRAPS OFF OF THE BOTTOM OF THE SCREEN, FRESH CHARACTERS WILL NOT BE PULLED IN
-//     CURSOR CAN MOVE AND DELETE '$ ' WHEN ON UNWRAPPED LINE.
 
 fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) callconv(.c) void {
     if(glad.glad_glViewport) |glViewport|{
