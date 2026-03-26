@@ -37,6 +37,13 @@ fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) c
         var proj: m.mat4 = undefined;
         m.ortho(0.0, @floatFromInt(width), @floatFromInt(height), 0.0, -1.0, 1.0, &proj);
         tRenderer.projection = proj;
+
+        const cell_width: u32 = @max(1, @as(u32, @intCast(width))/atls.?.*.cell_w);
+        const cell_height: u32 = @max(1, @as(u32, @intCast(height))/atls.?.*.cell_h);
+        text_buf.setWidth(cell_width, gpa.allocator()) catch return;
+        text_buf.setHeight(cell_height, gpa.allocator()) catch return;
+
+        _=pts.set_term_size(@intCast(cell_width), @intCast(cell_height), @intCast(width), @intCast(height));
     }
 
     _ = window; //To prevent the stupid unused function parameter errors
