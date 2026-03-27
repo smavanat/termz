@@ -11,7 +11,6 @@ const m = imports.termz_core.mu;
 const glfw = imports.termz_c_externals.glfw;
 const glad = imports.termz_c_externals.glad;
 const freetype = imports.termz_c_externals.freetype;
-const utils = imports.termz_c_externals.utils;
 
 const termz_c = imports.termz_c;
 
@@ -27,7 +26,7 @@ var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 //      SYNTAX HIGHLIGHTING
 //      CROSS PLATFORM SUPPORT
 //      CLIPBOARD SUPPORT
-//      MAKE THE minXPos PROPERTY ACTUALLY USABLE
+//      MAKE THE minXPos PROPERTY ACTUALLY USABLE -> Add cwd before start of line
 
 //BUG: WHEN DELETING A CHARACTER FROM A LINE THAT WRAPS OFF OF THE BOTTOM OF THE SCREEN, FRESH CHARACTERS WILL NOT BE PULLED IN
 

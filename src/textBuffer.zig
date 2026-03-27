@@ -68,6 +68,7 @@ const scroll_line = struct {
 
     pub fn deinit(self: *scroll_line, gpa: std.mem.Allocator) void {
         self.characters.deinit(gpa);
+        gpa.destroy(self.characters);
     }
 };
 

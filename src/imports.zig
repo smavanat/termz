@@ -29,20 +29,16 @@ pub const termz_core = struct {
 };
 
 const lglad = @cImport({@cInclude("glad/glad.h");});
-const lcglm = @cImport({@cInclude("cglm/cglm.h");});
 const lfreetype = @cImport({@cInclude("freetype/ft2build.h"); @cInclude("freetype/freetype.h");});
 const lglfw = @cImport({@cInclude("glfw/glfw3.h");});
 
 pub const termz_c_externals = struct {
     /// Import for glad
     pub const glad = lglad;
-    /// Import for cglm
-    pub const cglm = lcglm;
     /// Import for freetype
     pub const freetype = lfreetype;
     /// Import for glfw
     pub const glfw = lglfw;
-    pub const utils = @cImport(@cInclude("utils/utils.h"));
 };
 
 pub const termz_c = @cImport({
