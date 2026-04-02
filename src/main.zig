@@ -7,6 +7,7 @@ const tb = imports.termz_core.tb;
 const in = imports.termz_core.in;
 const pty = imports.termz_core.pty;
 const m = imports.termz_core.mu;
+const ap = imports.termz_core.ap;
 
 const glfw = imports.termz_c_externals.glfw;
 const glad = imports.termz_c_externals.glad;
@@ -19,6 +20,7 @@ var tRenderer: tr.renderer = undefined;
 var text_buf: *tb.text_buffer = undefined;
 var atls: ?*tr.atlas = null;
 var pts: *pty.PTY = undefined;
+var ansi_p : *ap.ansi_parser = undefined;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 //TODO: PARSE UNICODE
@@ -123,6 +125,10 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     text_buf = gpa.allocator().create(tb.text_buffer) catch return false;
     text_buf.* = tb.text_buffer.init(800/atls.?.*.cell_w, 600/atls.?.*.cell_h, gpa.allocator()) catch return false;
 
+    //Loading the ansi parser:
+    ansi_p = gpa.allocator().create(ap.ansi_parser) catch return false;
+    ansi_p.* = ap.ansi_parser.init(text_buf);
+
     //Freeing freetype's resources
     _ = freetype.FT_Done_Face(face);
     _ = freetype.FT_Done_FreeType(ft);
@@ -138,10 +144,6 @@ fn checkGLError(label: []const u8) void {
     }
 }
 
-pub fn getErrno() i32 {
-    return termz_c.__errno_location().*;
-}
-
 pub fn main() !void {
     if(init(&gw)) {
         std.debug.print("Initialised\n", .{});
@@ -149,32 +151,7 @@ pub fn main() !void {
         _=std.os.linux.fcntl(pts.master, termz_c.F_SETFL, termz_c.O_NONBLOCK);
 
         while(glfw.glfwWindowShouldClose(gw) == 0) {
-            var buf = std.mem.zeroes([256]u8);
-            const n = termz_c.read(pts.master, &buf[0], buf.len);
-            if(n > 0) {
-                for(buf[0..@intCast(n)]) |b| {
-                    if(b != 0) {
-                        if(b == '\r') {
-                            try text_buf.setCursorX(0, gpa.allocator());
-                        }
-                        else {
-                            if(b != '\n') {
-                                _=try text_buf.insertText(b, gpa.allocator());
-                            }
-                            else if(text_buf.getScreenCursorX() != 0 or !text_buf.screen.get(text_buf.screen.size-1).wrapped){
-                                _=try text_buf.createNewLine(gpa.allocator());
-                            }
-                        }
-                    }
-                }
-            }
-            else if(n < 0) {
-                const err = getErrno();
-                if(err != termz_c.EAGAIN) {
-                    std.debug.print("Read error: {}\n", .{err});
-                    break;
-                }
-            }
+            ansi_p.parse(pts, gpa.allocator()) catch break;
 
             //Setting the background colour to be black
             glad.glClearColor(text_buf.backgroundColour.x, text_buf.backgroundColour.y, text_buf.backgroundColour.z, text_buf.backgroundColour.w);
@@ -198,6 +175,7 @@ pub fn main() !void {
         gpa.allocator().destroy(atls.?);
 
         gpa.allocator().destroy(pts);
+        gpa.allocator().destroy(ansi_p);
 
         _ = gpa.deinit();
     }

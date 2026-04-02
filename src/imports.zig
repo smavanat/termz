@@ -26,6 +26,7 @@ pub const termz_core = struct {
     /// Import for input.zig
     pub const in = lin;
     pub const pty = @import("pty.zig");
+    pub const ap = @import("ansiParser.zig");
 };
 
 const lglad = @cImport({@cInclude("glad/glad.h");});
