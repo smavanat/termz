@@ -104,77 +104,79 @@ pub const ansi_parser = struct {
                                     //ESC[{line};{column}H: Move cursor to line, column
                                     'H' => {
                                         if(args.items.len == 0) {
-                                            try self.text_buf.setCursorX(0, gpa);
-                                            try self.text_buf.setCursorY(0, gpa);
+                                            try self.text_buf.screenToLogical(0, 0, gpa);
                                         }
                                         if(args.items.len >= 2) {
-                                            try self.text_buf.setCursorY(args.items[args.items.len-2], gpa);
-                                            try self.text_buf.setCursorX(args.items[args.items.len-1], gpa);
+                                            try self.text_buf.screenToLogical(args.items[args.items.len-2], args.items[args.items.len-1], gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[{line};{column}f: Move cursor to line, column
                                     'f' => {
                                         if(args.items.len >= 2) {
-                                            try self.text_buf.setCursorY(args.items[args.items.len-2], gpa);
-                                            try self.text_buf.setCursorX(args.items[args.items.len-1], gpa);
+                                            try self.text_buf.screenToLogical(args.items[args.items.len-2], args.items[args.items.len-1], gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[#A: move cursor up # lines
                                     'A' => {
                                         if(args.items.len >= 1) {
-                                            try self.text_buf.moveCursorY(-@as(i32, @intCast(args.items[args.items.len-1])), gpa);
+                                            const newY: i32 = @as(i32, @intCast(self.text_buf.getScreenCursorY())) - @as(i32, @intCast(args.items[args.items.len-1]));
+                                            try self.text_buf.screenToLogical(newY, self.text_buf.getScreenCursorX(), gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[#B: move cursor down # lines
                                     'B' => {
                                         if(args.items.len >= 1) {
-                                            try self.text_buf.moveCursorY(@intCast(args.items[args.items.len-1]), gpa);
+                                            const newY: i32 = @as(i32, @intCast(self.text_buf.getScreenCursorY())) + @as(i32, @intCast(args.items[args.items.len-1]));
+                                            try self.text_buf.screenToLogical(newY, self.text_buf.getScreenCursorX(), gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[#C: move cursor right # columns
                                     'C' => {
                                         if(args.items.len >= 1) {
-                                            try self.text_buf.moveCursorX(@intCast(args.items[args.items.len-1]), gpa);
+                                            const newX: i32 = @as(i32, @intCast(self.text_buf.getScreenCursorX())) + @as(i32, @intCast(args.items[args.items.len-1]));
+                                            try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), newX, gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[#D: move cursor left # columns
                                     'D' => {
                                         if(args.items.len >= 1) {
-                                            try self.text_buf.moveCursorX(-@as(i32, @intCast(args.items[args.items.len-1])), gpa);
+                                            const newX: i32 = @as(i32, @intCast(self.text_buf.getScreenCursorX())) - @as(i32, @intCast(args.items[args.items.len-1]));
+                                            try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), newX, gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[#E: move cursor to begining of line, # lines down
                                     'E' => {
                                         if(args.items.len >= 1) {
-                                            try self.text_buf.setCursorX(0, gpa);
-                                            try self.text_buf.moveCursorY(@intCast(args.items[args.items.len-1]), gpa);
+                                            const newY: i32 = @as(i32, @intCast(self.text_buf.getScreenCursorY())) + @as(i32, @intCast(args.items[args.items.len-1]));
+                                            try self.text_buf.screenToLogical(newY, 0, gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[#E: move cursor to begining of line, # lines up
                                     'F' => {
                                         if(args.items.len >= 1) {
-                                            try self.text_buf.setCursorX(0, gpa);
-                                            try self.text_buf.moveCursorY(-@as(i32, @intCast(args.items[args.items.len-1])), gpa);
+                                            const newY: i32 = @as(i32, @intCast(self.text_buf.getScreenCursorY())) - @as(i32, @intCast(args.items[args.items.len-1]));
+                                            try self.text_buf.screenToLogical(newY, 0, gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[#G: move cursor to column #
                                     'G' => {
                                         if(args.items.len >= 1) {
-                                            try self.text_buf.setCursorX(args.items[args.items.len-1], gpa);
+                                            try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), args.items[args.items.len-1], gpa);
                                             args.clearRetainingCapacity();
                                         }
                                     },
                                     //ESC[M: move cursor one line up
                                     'M' => {
-                                        try self.text_buf.moveCursorY(-1, gpa);
+                                        const newY: i32 = @as(i32, @intCast(self.text_buf.getScreenCursorY())) - 1;
+                                        try self.text_buf.screenToLogical(newY, self.text_buf.getScreenCursorX(), gpa);
                                         args.clearRetainingCapacity();
                                     },
 

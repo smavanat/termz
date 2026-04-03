@@ -245,6 +245,29 @@ pub const text_buffer = struct {
         try self.setCursorY(@as(u32, @intCast(val + @as(i32, @intCast(self.cursorY)))), gpa);
     }
 
+    pub fn screenToLogical(self: *text_buffer, screenY: u32, screenX: u32, gpa: std.mem.Allocator) !void {
+        //Clamp the given values
+        const localScreenY = @max(0, @min(screenY, self.height-1));
+        const localScreenX = @max(0, @min(screenX, self.width-1));
+
+        var remaining = localScreenY;
+        var logicalY = self.getLogicalScreenTop();
+
+        while(logicalY <= self.bottomIndex) {
+            const lines = self.logicalToTerminal(logicalY);
+
+            //Found the right logical line
+            if(remaining < lines) {
+                self.cursorY = logicalY;
+                self.cursorX = remaining * self.width + localScreenX;
+                try self.setCursorX(self.cursorX, gpa);
+                return;
+            }
+            remaining -= lines;
+            logicalY += 1;
+        }
+    }
+
     // =============== BUFFER MANIPULATION ==================
 
     /// Moves the bottom index of the screen by some number of spaces
