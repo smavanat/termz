@@ -65,11 +65,11 @@ pub const ansi_parser = struct {
                         if(self.state == parser_state.NORMAL) {
                             switch(b) {
                                 @intFromEnum(c0_controls.BS)  => {_=try self.text_buf.deleteText(gpa);},
-                                @intFromEnum(c0_controls.HT)  => {try self.text_buf.moveCursorX(4, gpa);},
+                                @intFromEnum(c0_controls.HT)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), self.text_buf.getScreenCursorX() + 4, gpa);},
                                 @intFromEnum(c0_controls.LF)  => {_=try self.text_buf.createNewLine(gpa);},
-                                @intFromEnum(c0_controls.VT)  => {try self.text_buf.moveCursorY(4, gpa);},
-                                @intFromEnum(c0_controls.FF)  => {try self.text_buf.clearScreen(gpa);},
-                                @intFromEnum(c0_controls.CR)  => {try self.text_buf.setCursorX(0, gpa);},
+                                @intFromEnum(c0_controls.VT)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY() + 4, self.text_buf.getScreenCursorX(), gpa);},
+                                @intFromEnum(c0_controls.FF)  => {self.text_buf.clearScreen();},
+                                @intFromEnum(c0_controls.CR)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), 0, gpa);},
                                 @intFromEnum(c0_controls.ESC) => {self.state = parser_state.ESCAPE;},
                                 else => {_=try self.text_buf.insertText(b, gpa);}
                             }
@@ -190,10 +190,10 @@ pub const ansi_parser = struct {
 
                                         }
                                         else if(args.items[args.items.len-1] == 2) {
-                                            try self.text_buf.clearScreen(gpa);
+                                            self.text_buf.clearScreen();
                                         }
                                         else if(args.items[args.items.len-1] == 3) {
-                                            try self.text_buf.clearScreenAndScrollBack(gpa);
+                                            try self.text_buf.clearScrollback(gpa);
                                         }
                                         args.clearRetainingCapacity();
                                     },

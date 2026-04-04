@@ -9,8 +9,8 @@ pub fn keyCallback(text_buf: *tb.text_buffer, pts: *pty.PTY, key: i32, gpa: std.
     _ = switch(key) {
         glfw.GLFW_KEY_BACKSPACE =>text_buf.deleteText(gpa) catch return,
         glfw.GLFW_KEY_ENTER => {text_buf.writeToPTY(pts, gpa); _=text_buf.createNewLine(gpa) catch return;},
-        glfw.GLFW_KEY_LEFT => text_buf.moveCursorX(-1, gpa) catch return,
-        glfw.GLFW_KEY_RIGHT => text_buf.moveCursorX(1, gpa) catch return,
+        glfw.GLFW_KEY_LEFT => text_buf.moveCursorX(-1, true, gpa) catch return,
+        glfw.GLFW_KEY_RIGHT => text_buf.moveCursorX(1, true, gpa) catch return,
         else => {},
     };
 }

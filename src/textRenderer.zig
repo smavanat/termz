@@ -148,24 +148,26 @@ pub const renderer = struct {
         var x_cursor_pos: u16 = 0;
         var y_cursor_pos: u16 = 0;
 
-        for(0..tex_buf.screen.size+1) |i| {
-            if(i >= tex_buf.height) continue;
+        for(0..tex_buf.screen.size) |i| {
             x_cursor_pos = 0;
             const line = tex_buf.screen.get(@intCast(i));
-            const line_len = if(i < tex_buf.screen.size) line.characters.items.len else 0;
-            for(0..line_len+1) |j| {
-                // std.debug.print("Screen Cursor pos: ({}, {})", .{tex_buf.getScreenCursorX(), tex_buf.getScreenCursorY()});
+            for(0..line.characters.items.len) |j| {
+                const is_cursor = (i == tex_buf.getScreenCursorY() and j == tex_buf.getScreenCursorX()); //Check if we are at the cursor's position
 
-                if(j >= tex_buf.width) continue;
-                const ch :u8 = if(j < line_len) line.characters.items[j].char else 32;
-                if (ch < 32 or ch > 126) continue;
+                if(j >= tex_buf.width) continue; //If beyond the screen width, skip
+
+                //Get the current char
+                var ch :u8 = line.characters.items[j].char;
+                //If at the cursor's pos and the current char is a control character, set it to be space to make sure the cursor is printed
+                if(is_cursor and (ch < 32 or ch > 126)) ch = 32;
+                if (ch < 32 or ch > 126) continue; //If the current char is a control character, skip rendering it
 
                 const xpos: f32 = @as(f32, @floatFromInt(x_cursor_pos * at.cell_w));
                 const ypos: f32 = @as(f32, @floatFromInt(y_cursor_pos * at.cell_h));
                 const w: f32 = @as(f32, @floatFromInt(at.cell_w));
                 const h: f32 = @as(f32, @floatFromInt(at.cell_h));
 
-                const is_cursor = (i == tex_buf.getScreenCursorY() and j == tex_buf.getScreenCursorX());
+                //If we are at the cursor's position, swap the foreground and background characters
                 const fg = if(is_cursor) tex_buf.backgroundColour else tex_buf.foregroundColour;
                 const bg = if(is_cursor) tex_buf.foregroundColour else tex_buf.backgroundColour;
 
