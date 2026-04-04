@@ -5,6 +5,11 @@ pub const ivec2 = struct {
     y: i32
 };
 
+pub const uvec2 = struct {
+    x: u32,
+    y: u32
+};
+
 pub const vec2 = struct {
     x: f32,
     y: f32

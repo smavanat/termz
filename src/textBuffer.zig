@@ -72,12 +72,11 @@ const terminal_line = struct {
 const scroll_line = struct {
     characters: *std.ArrayList(character_cell),
     minXPos: u32,
-    maxXPos: u32,
 
     pub fn init(width: u32, gpa: std.mem.Allocator) !scroll_line {
         const ch_ptr = try gpa.create(std.ArrayList(character_cell));
         ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
-        return scroll_line{.characters = ch_ptr, .minXPos = 2, .maxXPos = 2};
+        return scroll_line{.characters = ch_ptr, .minXPos = 2};
     }
 
     pub fn deinit(self: *scroll_line, gpa: std.mem.Allocator) void {
@@ -86,20 +85,18 @@ const scroll_line = struct {
     }
 
     pub fn insert(self: *scroll_line, pos: u32, ch: character_cell, gpa: std.mem.Allocator) !void {
-        if(pos > self.maxXPos+1) {
-            for(self.maxXPos+1..pos) |i| {
+        if(pos > self.characters.items.len) {
+            for(self.characters.items.len..pos) |i| {
                 _=i;
                 try self.characters.append(gpa, try character_cell.init(0));
-                self.maxXPos += 1;
             }
         }
 
         try self.characters.insert(gpa, pos, ch);
-        self.maxXPos += 1;
     }
 
     pub fn overwrite(self: *scroll_line, pos: u32, ch: u8, gpa: std.mem.Allocator) !void {
-        if(pos > self.maxXPos) {
+        if(pos >= self.characters.items.len) {
             try self.insert(pos, try character_cell.init(ch), gpa);
         }
         else {
@@ -108,28 +105,31 @@ const scroll_line = struct {
     }
 
     pub fn delete(self: *scroll_line, pos: u32) !character_cell {
+        if(pos >= self.characters.items.len) return character_cell.init(0);
+
         const ret = self.characters.orderedRemove(@intCast(pos));
-        if(pos == self.maxXPos) {
-            for(self.characters.items.len..0) |i| {
-                self.maxXPos -= 1;
+        if(pos == self.characters.items.len) {
+            var i = self.characters.items.len-1;
+            while(i > 0) {
                 if(self.characters.items[i].char != 0) {
                     break;
                 }
                 else {
                     _= self.characters.orderedRemove(i);
                 }
+                i -= 1;
             }
-        }
-        else {
-            self.maxXPos -= 1;
         }
 
         return ret;
     }
-};
 
-//TODO: OVERWRITE TEXT FUNCTION
-//      ERASURE FUNCTION
+    pub fn erase(self: *scroll_line, pos: u32) !void {
+        if(pos >= self.characters.items.len) return;
+
+        _=try self.delete(pos);
+    }
+};
 
 /// A struct implementing a Terminal text buffer for holding the text currently on the screen and that has been scrolled past
 /// Stores two buffers for the screen and scrollback content, alongside the current cursor position
@@ -310,27 +310,10 @@ pub const text_buffer = struct {
     }
 
     pub fn screenToLogical(self: *text_buffer, screenY: u32, screenX: u32, gpa: std.mem.Allocator) !void {
-        //Clamp the given values
-        const localScreenY = @max(0, @min(screenY, self.height-1));
-        const localScreenX = @max(0, @min(screenX, self.width-1));
+        const vals = try self.getLogicalFromScreen(screenY, screenX);
 
-        var lines = self.bottomOffset;
-        var logicalY  = self.bottomIndex;
-
-        while(logicalY >= self.getLogicalScreenTop()) {
-            if (lines == 0) {
-                logicalY -= 1;
-                lines = self.logicalToTerminal(logicalY);
-            }
-
-            if(self.height - lines == localScreenY) {
-                self.cursorY = logicalY;
-                self.cursorX = (lines-1) * self.width + localScreenX;
-                try self.setCursorX(self.cursorX, gpa);
-            }
-
-            lines -= 1;
-        }
+        try self.setCursorY(vals.y, gpa);
+        try self.setCursorX(vals.x, gpa);
     }
 
     // =============== BUFFER MANIPULATION ==================
@@ -425,10 +408,14 @@ pub const text_buffer = struct {
     }
 
     /// Clears the lines from the screen. Does not remove anything from the scrollback
-    pub fn clearScreen(self: *text_buffer) void {
+    pub fn clearScreenOnly(self: *text_buffer) void {
         for(0..self.height) |i| {
             self.screen.get(@intCast(i)).clearline();
         }
+    }
+
+    pub fn clearScreen(self: *text_buffer) !void {
+        try self.eraseText(.{.x = 0, .y = 0}, .{.x = self.width-1, .y = self.height-1});
     }
 
     /// Clears all data from the scrollback except what is currently on the screen
@@ -510,6 +497,16 @@ pub const text_buffer = struct {
         return true;
     }
 
+    pub fn overwriteText(self: *text_buffer, text: u8, gpa: std.mem.Allocator) !void {
+        const sline: *scroll_line = self.scrollback.items[self.cursorY];
+        const tline: *terminal_line = self.screen.get(self.getScreenCursorY());
+
+        try sline.overwrite(self.cursorX, text, gpa);
+        tline.characters.items[self.getScreenCursorX()].char = text;
+
+        try self.moveCursorX(1, false, gpa);
+    }
+
     /// Moves the cursor left one position and removes the character at the cursor's new position
     /// If the cursor lands on a wide char, removes both characters in the char
     /// @param gpa the allocator to use to allocate new screen data if necessary
@@ -533,6 +530,34 @@ pub const text_buffer = struct {
             end_ch = if(line_y < self.height-1 and self.screen.get(line_y+1).wrapped) self.screen.get(line_y+1).characters.orderedRemove(0) else try character_cell.init(0);
         }
         return true;
+    }
+
+    pub fn eraseText(self: *text_buffer, start_cell: mu.uvec2, end_cell: mu.uvec2) !void {
+        const logical_start = try self.getLogicalFromScreen(start_cell.y, start_cell.x);
+
+        var tx = start_cell.x;
+        var lx = logical_start.x;
+        var ly = logical_start.y;
+
+        var sline: *scroll_line = self.scrollback.items[ly];
+
+        for(start_cell.y..end_cell.y+1) |i| {
+
+            const tline = self.screen.get(@intCast(i));
+            if(i != start_cell.y and !tline.wrapped) {
+                lx = 0;
+                ly += 1;
+                sline = self.scrollback.items[ly];
+            }
+
+            const end_x = if(i == end_cell.y) end_cell.x+1 else self.width;
+            for(tx..end_x) |x| {
+                tline.characters.items[x].char = 0;
+                try sline.erase(lx);
+            }
+
+            tx = 0;
+        }
     }
 
     // =============== PTY FUNCTIONS =================
@@ -634,6 +659,34 @@ pub const text_buffer = struct {
             self.bottomOffset = 1;
         }
         self.cursorX = 0;
+    }
+
+    fn getLogicalFromScreen(self: *text_buffer, screenY: u32, screenX: u32) !mu.uvec2 {
+        //Clamp the given values
+        const localScreenY = @max(0, @min(screenY, self.height-1));
+        const localScreenX = @max(0, @min(screenX, self.width-1));
+
+        var lines = self.bottomOffset;
+        var logicalY  = self.bottomIndex;
+        var logicalX: u32 = 0;
+
+        while(logicalY >= self.getLogicalScreenTop()) {
+            if (lines == 0) {
+                if(logicalY == self.getLogicalScreenTop()) break;
+                logicalY -= 1;
+                lines = self.logicalToTerminal(logicalY);
+            }
+
+            if(self.height - lines == localScreenY) {
+                self.cursorY = logicalY;
+                logicalX = (lines-1) * self.width + localScreenX;
+                break;
+            }
+
+            lines -= 1;
+        }
+
+        return .{.x = logicalX, .y = localScreenY};
     }
 
     /// Helper function to see how many Terminal screen lines the logical line at the given index takes up

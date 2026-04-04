@@ -68,10 +68,10 @@ pub const ansi_parser = struct {
                                 @intFromEnum(c0_controls.HT)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), self.text_buf.getScreenCursorX() + 4, gpa);},
                                 @intFromEnum(c0_controls.LF)  => {_=try self.text_buf.createNewLine(gpa);},
                                 @intFromEnum(c0_controls.VT)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY() + 4, self.text_buf.getScreenCursorX(), gpa);},
-                                @intFromEnum(c0_controls.FF)  => {self.text_buf.clearScreen();},
+                                @intFromEnum(c0_controls.FF)  => {try self.text_buf.clearScreen();},
                                 @intFromEnum(c0_controls.CR)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), 0, gpa);},
                                 @intFromEnum(c0_controls.ESC) => {self.state = parser_state.ESCAPE;},
-                                else => {_=try self.text_buf.insertText(b, gpa);}
+                                else => {_=try self.text_buf.overwriteText(b, gpa);}
                             }
                         }
                         else if(self.state == parser_state.ESCAPE) {
@@ -184,13 +184,13 @@ pub const ansi_parser = struct {
 
                                     'J' => {
                                         if(args.items.len == 0 or args.items[args.items.len-1] == 0) {
-
+                                            try self.text_buf.eraseText(.{.x=self.text_buf.getScreenCursorX(), .y=self.text_buf.getScreenCursorY()}, .{.x=self.text_buf.width-1, .y=self.text_buf.height-1});
                                         }
                                         else if(args.items[args.items.len-1] == 1) {
-
+                                            try self.text_buf.eraseText(.{.x=0, .y=0}, .{.x=self.text_buf.getScreenCursorX(), .y=self.text_buf.getScreenCursorY()}, );
                                         }
                                         else if(args.items[args.items.len-1] == 2) {
-                                            self.text_buf.clearScreen();
+                                            try self.text_buf.clearScreen();
                                         }
                                         else if(args.items[args.items.len-1] == 3) {
                                             try self.text_buf.clearScrollback(gpa);
@@ -199,13 +199,13 @@ pub const ansi_parser = struct {
                                     },
                                     'K' => {
                                         if(args.items.len == 0 or args.items[args.items.len-1] == 0) {
-
+                                            try self.text_buf.eraseText(.{.x=self.text_buf.getScreenCursorX(), .y=self.text_buf.getScreenCursorY()}, .{.x=self.text_buf.width-1, .y=self.text_buf.getScreenCursorY()});
                                         }
                                         else if(args.items[args.items.len-1] == 1) {
-
+                                            try self.text_buf.eraseText(.{.x=0, .y=self.text_buf.getScreenCursorY()}, .{.x=self.text_buf.getScreenCursorX(), .y=self.text_buf.getScreenCursorY()}, );
                                         }
                                         else if(args.items[args.items.len-1] == 2) {
-                                            // self.text_buf.clearLine(gpa);
+                                            try self.text_buf.eraseText(.{.x=0, .y=self.text_buf.getScreenCursorY()}, .{.x=self.text_buf.width-1, .y=self.text_buf.getScreenCursorY()}, );
                                         }
                                     },
 
