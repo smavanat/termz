@@ -17,6 +17,6 @@ pub fn keyCallback(text_buf: *tb.text_buffer, pts: *pty.PTY, key: i32, gpa: std.
 
 pub fn onCharInput(text_buf: *tb.text_buffer, codepoint: u32, gpa: std.mem.Allocator) void {
     if(codepoint >= 32 and codepoint < 128) {
-        _ = text_buf.insertText(@intCast(codepoint), gpa) catch return;
+        text_buf.insertText(@intCast(codepoint), gpa) catch return;
     }
 }

@@ -46,6 +46,9 @@ const terminal_line = struct {
         const ch_ptr = try gpa.create(std.ArrayList(character_cell));
         ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
 
+        //Each line in the terminal is filled with blank characters (setting the char value to 0 means it will not be rendered)
+        //This means that we can do operations like char overwriting very easily and since the number of cells in the screen
+        //will usually be small anyway, it shouldn't be that much wasted memory
         for(0..width) |i| {
             _=i;
             try ch_ptr.append(gpa, try character_cell.init(0));
@@ -58,6 +61,7 @@ const terminal_line = struct {
         gpa.destroy(self.characters);
     }
 
+    /// Clears a line back to blank and uncolour characters
     pub fn clearline(self: *terminal_line) void {
         for(0..self.characters.items.len) |i| {
             self.characters.items[i].char = 0; //Setting the char to be a non-printable character by default
@@ -69,21 +73,29 @@ const terminal_line = struct {
     }
 };
 
+/// Represents a logical line held in the scrollback
+/// Contains an array list holding all of the characters in this line, as well as the minimum position the cursor can be moved to by the user
+/// Also has several functions for interfacting with the character arraylist. These should be used instead of the built in functions for all operations
 const scroll_line = struct {
-    characters: *std.ArrayList(character_cell),
-    minXPos: u32,
+    characters: *std.ArrayList(character_cell), //Holds all of the characters in this line
+    minXPos: u32, //Minimum position the user can move the cursor to in this line
 
+    /// Initialises an empty scroll line
     pub fn init(width: u32, gpa: std.mem.Allocator) !scroll_line {
         const ch_ptr = try gpa.create(std.ArrayList(character_cell));
         ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
         return scroll_line{.characters = ch_ptr, .minXPos = 2};
     }
 
+    /// Destroys this scroll line instance
     pub fn deinit(self: *scroll_line, gpa: std.mem.Allocator) void {
         self.characters.deinit(gpa);
         gpa.destroy(self.characters);
     }
 
+    /// Inserts an element into this scroll line.
+    /// If the position given is far beyond the end of the line, inserts empty cells between the
+    /// current end of the line and the new character
     pub fn insert(self: *scroll_line, pos: u32, ch: character_cell, gpa: std.mem.Allocator) !void {
         if(pos > self.characters.items.len) {
             for(self.characters.items.len..pos) |i| {
@@ -95,6 +107,9 @@ const scroll_line = struct {
         try self.characters.insert(gpa, pos, ch);
     }
 
+    /// Overwrites an element in this scroll line
+    /// If the position given is far beyond the end of the line, inserts empty cells between the
+    /// current end of the line and the overwritten character
     pub fn overwrite(self: *scroll_line, pos: u32, ch: u8, gpa: std.mem.Allocator) !void {
         if(pos >= self.characters.items.len) {
             try self.insert(pos, try character_cell.init(ch), gpa);
@@ -104,13 +119,18 @@ const scroll_line = struct {
         }
     }
 
+    /// Removes an element from this line
+    /// Also removes all empty padding cells stored in this line before this character until it reaches the next filled character cell
+    /// Returns the original character cell removed
     pub fn delete(self: *scroll_line, pos: u32) !character_cell {
-        if(pos >= self.characters.items.len) return character_cell.init(0);
+        if(pos >= self.characters.items.len) return character_cell.init(0); //Early exit if the cell we are removing is beyond the size of this line.
 
         const ret = self.characters.orderedRemove(@intCast(pos));
+
+        //If the cell removed is at the end of the line, keep removing all blank cells until we reach another filled one
         if(pos == self.characters.items.len) {
             var i = self.characters.items.len-1;
-            while(i > 0) {
+            while(i >= 0) {
                 if(self.characters.items[i].char != 0) {
                     break;
                 }
@@ -124,10 +144,26 @@ const scroll_line = struct {
         return ret;
     }
 
+    /// Removes an element from this line
+    /// Also removes all empty padding cells stored in this line before this character until it reaches the next filled character cell
     pub fn erase(self: *scroll_line, pos: u32) !void {
         if(pos >= self.characters.items.len) return;
 
-        _=try self.delete(pos);
+        if(pos == self.characters.items.len-1) {
+            var i = self.characters.items.len-1;
+            while(i >= 0) {
+                if(self.characters.items[i].char != 0) {
+                    break;
+                }
+                else {
+                    _= self.characters.orderedRemove(i);
+                }
+                i -= 1;
+            }
+        }
+        else {
+            self.characters.items[pos].char = 0;
+        }
     }
 };
 
@@ -139,8 +175,8 @@ pub const text_buffer = struct {
     height: u32,
     cursorX: u32,
     cursorY: u32,
-    bottomIndex: u32,
-    bottomOffset: u32,
+    bottomIndex: u32, //Index of the bottom line on the screen in the scrollback
+    bottomOffset: u32, //How many on-screen lines the bottom line currently takes up (could be less than its full size if its paritally on the screen)
     backgroundColour: *mu.vec4,
     foregroundColour: *mu.vec4,
     scrollback: *std.ArrayList(*scroll_line),
@@ -150,6 +186,7 @@ pub const text_buffer = struct {
         const sb_ptr = try gpa.create(std.ArrayList(*scroll_line));
         sb_ptr.* = try std.ArrayList(*scroll_line).initCapacity(gpa, h * 2);
 
+        //Adds one line to the scrollback
         const init_line = try gpa.create(scroll_line);
         init_line.* = try scroll_line.init(w, gpa);
 
@@ -158,6 +195,7 @@ pub const text_buffer = struct {
         const s_ptr = try gpa.create(ca.CircularArray(*terminal_line, null));
         s_ptr.* = try ca.CircularArray(*terminal_line, null).init(gpa, h);
 
+        //Fill the screen with blank lines
         for(0..h) |i| {
             _=i;
             const init_tline = try gpa.create(terminal_line);
@@ -203,8 +241,8 @@ pub const text_buffer = struct {
 
     /// @return the on-screen y position of the cursor
     pub fn getScreenCursorY(self: *text_buffer) u32 {
-        //If the number of lines in the scrollback is less than the height
         var screen_height = self.height;
+        //If the number of lines in the scrollback is less than the height
         if(self.scrollback.items.len <= self.height) {
             //Check if we even have space to scroll
             var line_sum: u32 = 0;
@@ -212,12 +250,15 @@ pub const text_buffer = struct {
                 line_sum += self.logicalToTerminal(i);
             }
 
+            //Set the screen height to be the minimum of the space taken up by the lines in the scrollback and the actual possible height
             screen_height = @min(line_sum, self.height);
         }
 
+        //Starting position of the cursor is at the bottom line
         var screenY: u32 = screen_height-self.bottomOffset;
         var logicalY: u32 = self.bottomIndex;
 
+        //Keep going up the page until we hit the cursor's actual position
         while(logicalY >= self.cursorY) {
             screenY -= @min(screenY, self.logicalToTerminal(logicalY)-1);
             if(logicalY <= 0) break;
@@ -251,7 +292,9 @@ pub const text_buffer = struct {
     /// @param val the new x position to move the cursor to
     pub fn setCursorX(self: *text_buffer, val: u32, gpa: std.mem.Allocator) !void {
         self.cursorX = @max(0, val);
-        if(self.cursorY == self.scrollback.items.len-1 and self.bottomIndex == self.scrollback.items.len-1 and
+
+        //TODO: CAN WE SIMPLIFY
+        if(self.cursorY == self.bottomIndex and
             self.screen.get(@intCast(self.screen.size-1)).characters.items.len == self.width and
             self.cursorX != 0 and self.cursorX % self.width == 0) {
             if(self.screen.size == self.height) {
@@ -259,7 +302,8 @@ pub const text_buffer = struct {
             }
         }
 
-        if (self.cursorX > 0 and self.cursorX < self.scrollback.items[self.cursorY].characters.items.len and self.scrollback.items[self.cursorY].characters.items[self.cursorX].trailFlag == TrailFlag.WIDE_END) //Cursor can never land on the end of a wide character
+        //Cursor can never land on the end of a wide character
+        if (self.cursorX > 0 and self.cursorX < self.scrollback.items[self.cursorY].characters.items.len and self.scrollback.items[self.cursorY].characters.items[self.cursorX].trailFlag == TrailFlag.WIDE_END)
             self.cursorX -= 1;
     }
 
@@ -284,6 +328,7 @@ pub const text_buffer = struct {
     /// The cursor's end position is clamped between [0, line_width), where line_width is the number of characters in the unwrapped line the cursor is on
     /// If the cursor ends at a cell with TrailFlag WIDE_END, move one cell in the direction you want to move to
     /// @param val the number of steps to move
+    /// @param isUser whether the user or the shell is the one moving the cursor
     pub fn moveCursorX(self: *text_buffer, val: i32, isUser: bool, gpa: std.mem.Allocator) !void {
         var pos: u32 = @intCast(@max(0, val + @as(i32, @intCast(self.cursorX))));
 
@@ -298,6 +343,7 @@ pub const text_buffer = struct {
             } //If moving left
         }
 
+        //If this is the user moving the cusor, clamp the position to not move beyond the line boundaries
         if(isUser) pos = @max(line.minXPos, @min(pos, line.characters.items.len));
         try self.setCursorX(pos, gpa);
     }
@@ -309,6 +355,7 @@ pub const text_buffer = struct {
         try self.setCursorY(@as(u32, @intCast(val + @as(i32, @intCast(self.cursorY)))), gpa);
     }
 
+    /// Moves the cursor's logical position based on the given screen coordinates
     pub fn screenToLogical(self: *text_buffer, screenY: u32, screenX: u32, gpa: std.mem.Allocator) !void {
         const vals = try self.getLogicalFromScreen(screenY, screenX);
 
@@ -383,6 +430,7 @@ pub const text_buffer = struct {
                     line_x = @intCast(sline.characters.items.len); //Set the x position to be at the end of the line
                 }
 
+                //Shift the line at the top to the bottom, nice trick to re-use memory
                 const tline = try self.screen.removeFromBack(gpa);
                 tline.clearline();
                 try self.screen.addToFront(tline, gpa);
@@ -414,6 +462,7 @@ pub const text_buffer = struct {
         }
     }
 
+    /// Clears the screen, erasing the corresponding chars in the scrollback
     pub fn clearScreen(self: *text_buffer) !void {
         try self.eraseText(.{.x = 0, .y = 0}, .{.x = self.width-1, .y = self.height-1});
     }
@@ -463,17 +512,14 @@ pub const text_buffer = struct {
 
     // =============== TEXT EDITING ==================
 
-    /// Inserts text at the mouse cursor's position only if the cursor is at the bottom of the screen and scrollback
+    /// Inserts text at the mouse cursor's position
     /// Moves the cursor to the right w times, where w is the width of the input character
     /// If the cursor starts at the end of a wide character, moves one space to the left before writing
     /// If inserting the input at the current position would overlap with other wide characters, erase them first
     /// @param text the new character to add
-    /// @return true if the text was inserted, false if the cursor is not at the bottom line
-    pub fn insertText(self: *text_buffer, text: u8, gpa: std.mem.Allocator) !bool {
+    pub fn insertText(self: *text_buffer, text: u8, gpa: std.mem.Allocator) !void {
         const sline: *scroll_line = self.scrollback.items[self.cursorY];
         var tline: *terminal_line = self.screen.get(self.getScreenCursorY());
-
-        // const oldLines: u32 = self.logicalToTerminal(self.cursorY);
 
         const ch_ptr = try character_cell.init(text);
         try sline.insert(self.cursorX, ch_ptr, gpa);
@@ -494,18 +540,26 @@ pub const text_buffer = struct {
             end_ch = tline.characters.orderedRemove(tline.characters.items.len-1); //Update the new end char
         }
         try self.moveCursorX(1, false, gpa);
-        return true;
     }
 
+    /// Overwrites text at the cursor's current position
+    /// Moves the cursor to the right w times, where w is the width of the input character
+    /// If the cursor starts at the end of a wide character, moves one space to the left before writing
+    /// If inserting the input at the current position would overlap with other wide characters, erase them first
     pub fn overwriteText(self: *text_buffer, text: u8, gpa: std.mem.Allocator) !void {
+        //Get the screen and scrollback lines
         const sline: *scroll_line = self.scrollback.items[self.cursorY];
         const tline: *terminal_line = self.screen.get(self.getScreenCursorY());
 
+        //Overwrite the char in both
         try sline.overwrite(self.cursorX, text, gpa);
         tline.characters.items[self.getScreenCursorX()].char = text;
 
+        //Move the character
         try self.moveCursorX(1, false, gpa);
     }
+
+    //TODO: FIX DELETION ON WRAPPED LINES NOT WORKING
 
     /// Moves the cursor left one position and removes the character at the cursor's new position
     /// If the cursor lands on a wide char, removes both characters in the char
@@ -532,31 +586,43 @@ pub const text_buffer = struct {
         return true;
     }
 
+    /// Erases text (overwrites the cell contents to be blank) between the screen coordinates specified
+    /// by the start_cell and end_cell parameters
     pub fn eraseText(self: *text_buffer, start_cell: mu.uvec2, end_cell: mu.uvec2) !void {
+        //Get the logical position of the start
         const logical_start = try self.getLogicalFromScreen(start_cell.y, start_cell.x);
 
-        var tx = start_cell.x;
-        var lx = logical_start.x;
-        var ly = logical_start.y;
+        //Variables for the for loop
+        var tx = start_cell.x; //Start position for the screen line
+        var lx = logical_start.x; //Start position for the logical line
+        var ly = logical_start.y; //The index of the current logical line
 
         var sline: *scroll_line = self.scrollback.items[ly];
 
+        //Iterate over the screen lines
         for(start_cell.y..end_cell.y+1) |i| {
-
+            //Get the current terminal line
             const tline = self.screen.get(@intCast(i));
+            //If at line that does not wrap (that is not the start), ie, a new logical line, update the sline variable
+            //and reset lx to be the start of the line so we can erase from the start
             if(i != start_cell.y and !tline.wrapped) {
                 lx = 0;
                 ly += 1;
                 sline = self.scrollback.items[ly];
             }
-
-            const end_x = if(i == end_cell.y) end_cell.x+1 else self.width;
-            for(tx..end_x) |x| {
-                tline.characters.items[x].char = 0;
-                try sline.erase(lx);
+            else {
+                lx += self.width; //Otherwise we have already erased a whole line so move the logical counter along
             }
 
-            tx = 0;
+            //End is either the value specified in end_cell or just the end of the line if on intermediate line
+            const end_x = if(i == end_cell.y) end_cell.x+1 else self.width;
+            //Erase all characters in this range
+            for(tx..end_x) |x| {
+                tline.characters.items[x].char = 0;
+                try sline.erase(@intCast(lx+x));
+            }
+
+            tx = 0; //Reset back to start of screen line
         }
     }
 
@@ -596,7 +662,9 @@ pub const text_buffer = struct {
     // =============== HELPER FUNCTIONS ==================
 
     /// Rebuilds the screen from the bottom index
+    /// @param rebuild whether to rebuild the screen fully or just erase and replace the line content
     fn rebuildScreen(self: *text_buffer, rebuild: bool, gpa: std.mem.Allocator) !void {
+        //If rebuilding the screen, remove all of the old lines and add fresh new ones
         if(rebuild) {
             for(0..self.screen.size) |i| {
                 const line = self.screen.get(@intCast(i));
@@ -613,31 +681,47 @@ pub const text_buffer = struct {
                 try self.screen.addToFront(init_tline, gpa);
             }
         }
+        //Otherwise just clear all of the old lines
+        else {
+            for(0..self.height) |i| {
+                self.screen.get(@intCast(i)).clearline();
+            }
+        }
 
+        //Index of current terminal line being modified
         var tline_index = self.height-1;
-        var tline_ptr = self.screen.get(@intCast(tline_index));
+        //Current terminal line being modified
+        var tline_ptr: *terminal_line = undefined;
+        //Index of current logical line being copied
         var sline_index = self.bottomIndex;
+        //Current logical line being copied
         var sline_ptr = self.scrollback.items[sline_index];
+
         while(sline_index >= 0 and tline_index > 0) {
+            //Get the number of lines this logical line occupies
             const num_lines = self.logicalToTerminal(sline_index);
 
+            //Copy the chars over
             for(0..num_lines) |i| {
                 if(tline_index - (num_lines - i+1) < 0) continue;
+                tline_ptr = self.screen.get(@intCast(tline_index - (num_lines - i+1)));
 
                 for(i * self.width..@min((i+1)*self.width, sline_ptr.characters.items.len)) |x| {
                     tline_ptr.characters.items[x - (i * self.width)].char = sline_ptr.characters.items[x].char;
                 }
             }
 
+            //Move the current terminal line index back by the number of lines the screen line occupies
             tline_index -= num_lines;
-            if(tline_index == 0) break;
+            if(tline_index <= 0) break;
 
-            tline_ptr = self.screen.get(@intCast(tline_index));
+            //Move the logical line index back by one
             if(sline_index == 0) break;
             sline_index -= 1;
             sline_ptr = self.scrollback.items[sline_index];
         }
 
+        //May need to pull lines up if the number of lines in scrollback is less than screen size
         while(tline_index >= 0) {
             try self.screen.addToBack(try self.screen.removeFromFront(gpa), gpa);
             if(tline_index == 0) break;
@@ -661,29 +745,42 @@ pub const text_buffer = struct {
         self.cursorX = 0;
     }
 
+    /// Converts screen coordinates into logical coordinates based on the current content of the screen
     fn getLogicalFromScreen(self: *text_buffer, screenY: u32, screenX: u32) !mu.uvec2 {
         //Clamp the given values
         const localScreenY = @max(0, @min(screenY, self.height-1));
         const localScreenX = @max(0, @min(screenX, self.width-1));
 
+        //The number of lines taken up by the current logical line.
+        //Since we start at the bottom, this is bottomOffset since this is the line at bottom index
         var lines = self.bottomOffset;
+        //Current screen line we are inspecting
+        var screenPos = self.height-1;
+        //The index of the current logical line.
+        //Start at the bottom so its bottom index
         var logicalY  = self.bottomIndex;
+        //The converted logical x position
         var logicalX: u32 = 0;
 
-        while(logicalY >= self.getLogicalScreenTop()) {
+        while(logicalY >= self.getLogicalScreenTop() and screenPos >= 0) {
+            //If we have iterated over all of the lines,
+            //move onto the previous logical line
             if (lines == 0) {
-                if(logicalY == self.getLogicalScreenTop()) break;
+                if(logicalY == self.getLogicalScreenTop()) break; //Early exit if we reach the top of the screen
+                //Otherwise update values
                 logicalY -= 1;
                 lines = self.logicalToTerminal(logicalY);
             }
 
-            if(self.height - lines == localScreenY) {
+            //If we have found the equivalent logical line, break out of the for loop
+            if(screenPos == localScreenY) {
                 self.cursorY = logicalY;
                 logicalX = (lines-1) * self.width + localScreenX;
                 break;
             }
 
             lines -= 1;
+            screenPos -= 1;
         }
 
         return .{.x = logicalX, .y = localScreenY};
