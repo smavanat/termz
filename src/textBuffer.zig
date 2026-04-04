@@ -299,6 +299,7 @@ pub const text_buffer = struct {
             self.cursorX != 0 and self.cursorX % self.width == 0) {
             if(self.screen.size == self.height) {
                 try self.scroll(1, gpa);
+                self.screen.get(@intCast(self.height-1)).wrapped = true; //This one must wrap from the previous line
             }
         }
 
@@ -345,6 +346,9 @@ pub const text_buffer = struct {
 
         //If this is the user moving the cusor, clamp the position to not move beyond the line boundaries
         if(isUser) pos = @max(line.minXPos, @min(pos, line.characters.items.len));
+
+        //If we are moving onto a new screen line that is not beyond the screen, set it to be wrapped
+        if(pos/self.width > self.cursorX/self.width and self.getScreenCursorY() < self.height-1) self.screen.get(@intCast(self.getScreenCursorY()+1)).wrapped = true;
         try self.setCursorX(pos, gpa);
     }
 
@@ -522,11 +526,11 @@ pub const text_buffer = struct {
         var tline: *terminal_line = self.screen.get(self.getScreenCursorY());
 
         const ch_ptr = try character_cell.init(text);
+        var line_y = self.getScreenCursorY();
         try sline.insert(self.cursorX, ch_ptr, gpa);
         try tline.characters.insert(gpa, self.getScreenCursorX(), ch_ptr);
 
         var end_ch = tline.characters.orderedRemove(tline.characters.items.len-1);
-        var line_y = self.getScreenCursorY();
         while(end_ch.char != 0) {
             //If at the bottom of the screen, need to scroll
             if(line_y >= self.height-1) {
@@ -539,6 +543,7 @@ pub const text_buffer = struct {
             tline.wrapped = true; //Must be true since we wrapped from the previous line
             end_ch = tline.characters.orderedRemove(tline.characters.items.len-1); //Update the new end char
         }
+
         try self.moveCursorX(1, false, gpa);
     }
 
@@ -559,8 +564,6 @@ pub const text_buffer = struct {
         try self.moveCursorX(1, false, gpa);
     }
 
-    //TODO: FIX DELETION ON WRAPPED LINES NOT WORKING
-
     /// Moves the cursor left one position and removes the character at the cursor's new position
     /// If the cursor lands on a wide char, removes both characters in the char
     /// @param gpa the allocator to use to allocate new screen data if necessary
@@ -568,6 +571,9 @@ pub const text_buffer = struct {
     pub fn deleteText(self: *text_buffer, gpa: std.mem.Allocator) !bool {
         const sline: *scroll_line = self.scrollback.items[self.cursorY];
         if(self.cursorX <= 0 or self.cursorX <= sline.minXPos) return false;
+
+        //If moving back into the previous line after erasure, set the current line to no longer wrap from its predecessor
+        if(self.getScreenCursorX() == 0) self.screen.get(self.getScreenCursorY()).wrapped = false;
 
         self.cursorX -= 1;
         var tline: *terminal_line = self.screen.get(self.getScreenCursorY());
