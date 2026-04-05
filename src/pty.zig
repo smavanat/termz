@@ -82,7 +82,8 @@ pub const PTY = struct {
             if (self.slave > 2) _ = std.os.linux.close(self.slave);
 
             const args = [_:null][*c]const u8{ "-" ++ SHELL, null };
-            const env = [_:null][*c]const u8{ "TERM=dumb", "PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/root", null };
+            // const env = [_:null][*c]const u8{ "TERM=dumb", "PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/root", null };
+            const env = [_:null][*c]const u8{ "TERM=vt100", "PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/root", null };
             _ = std.os.linux.execve(SHELL, @ptrCast(&args), @ptrCast(&env));
 
             // If we get here execve failed

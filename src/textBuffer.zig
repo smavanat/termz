@@ -84,7 +84,7 @@ const scroll_line = struct {
     pub fn init(width: u32, gpa: std.mem.Allocator) !scroll_line {
         const ch_ptr = try gpa.create(std.ArrayList(character_cell));
         ch_ptr.* = try std.ArrayList(character_cell).initCapacity(gpa, width);
-        return scroll_line{.characters = ch_ptr, .minXPos = 2};
+        return scroll_line{.characters = ch_ptr, .minXPos = 0};
     }
 
     /// Destroys this scroll line instance
@@ -117,6 +117,7 @@ const scroll_line = struct {
         else {
             self.characters.items[pos].char = ch;
         }
+        if(pos+1 > self.minXPos) self.minXPos = pos+1;
     }
 
     /// Removes an element from this line
@@ -241,6 +242,8 @@ pub const text_buffer = struct {
 
     /// @return the on-screen y position of the cursor
     pub fn getScreenCursorY(self: *text_buffer) u32 {
+        if(self.bottomIndex == 0) return @min(self.cursorX / self.width, self.height-1); //Early exit if we are at the top of the scrollback
+
         var screen_height = self.height;
         //If the number of lines in the scrollback is less than the height
         if(self.scrollback.items.len <= self.height) {
@@ -256,11 +259,11 @@ pub const text_buffer = struct {
 
         //Starting position of the cursor is at the bottom line
         var screenY: u32 = screen_height-self.bottomOffset;
-        var logicalY: u32 = self.bottomIndex;
+        var logicalY: u32 = self.bottomIndex-1;
 
         //Keep going up the page until we hit the cursor's actual position
         while(logicalY >= self.cursorY) {
-            screenY -= @min(screenY, self.logicalToTerminal(logicalY)-1);
+            screenY -= @min(screenY, self.logicalToTerminal(logicalY));
             if(logicalY <= 0) break;
             logicalY -= 1;
         }
@@ -365,6 +368,8 @@ pub const text_buffer = struct {
 
         try self.setCursorY(vals.y, gpa);
         try self.setCursorX(vals.x, gpa);
+
+        // std.debug.print("Screen Pos: ({}, {}), Logical Pos: ({}, {}), Cursor Pos: ({}, {})\n", .{screenX, screenY, vals.x, vals.y, self.cursorX, self.cursorY});
     }
 
     // =============== BUFFER MANIPULATION ==================
@@ -382,7 +387,7 @@ pub const text_buffer = struct {
             for(0..self.scrollback.items.len) |i| {
                 line_sum += self.logicalToTerminal(i);
             }
-            if(line_sum < self.height) return;
+            if(line_sum <= self.height) return;
         }
 
         //If we are scrolling beyond the boundaries of the screen, just rebuild it
@@ -454,9 +459,8 @@ pub const text_buffer = struct {
 
     /// Inserts a new line
     /// Moves the cursor down one line, scrolling if necessary
-    pub fn createNewLine(self: *text_buffer, gpa: std.mem.Allocator) !bool {
+    pub fn createNewLine(self: *text_buffer, gpa: std.mem.Allocator) !void {
         try self.addNewLine(gpa);
-        return true;
     }
 
     /// Clears the lines from the screen. Does not remove anything from the scrollback
@@ -595,6 +599,10 @@ pub const text_buffer = struct {
     /// Erases text (overwrites the cell contents to be blank) between the screen coordinates specified
     /// by the start_cell and end_cell parameters
     pub fn eraseText(self: *text_buffer, start_cell: mu.uvec2, end_cell: mu.uvec2) !void {
+        // std.debug.print("\n============ Erasing Text ===============\n", .{});
+        // std.debug.print("Start: ({}, {}), End: ({}, {})\n", .{start_cell.x, start_cell.y, end_cell.x, end_cell.y});
+        // std.debug.print("Bottom Index: {} Logical Cursor Pos: ({}, {})\n", .{self.bottomIndex, self.cursorX, self.cursorY});
+
         //Get the logical position of the start
         const logical_start = try self.getLogicalFromScreen(start_cell.y, start_cell.x);
 
@@ -602,6 +610,7 @@ pub const text_buffer = struct {
         var tx = start_cell.x; //Start position for the screen line
         var lx = logical_start.x; //Start position for the logical line
         var ly = logical_start.y; //The index of the current logical line
+        // std.debug.print("tx: {}, lx: {}, ly: {}\n", .{tx, lx, ly});
 
         var sline: *scroll_line = self.scrollback.items[ly];
 
@@ -614,6 +623,7 @@ pub const text_buffer = struct {
             if(i != start_cell.y and !tline.wrapped) {
                 lx = 0;
                 ly += 1;
+                if(ly >= self.bottomIndex) break;
                 sline = self.scrollback.items[ly];
             }
             else {
@@ -629,6 +639,7 @@ pub const text_buffer = struct {
             }
 
             tx = 0; //Reset back to start of screen line
+            // std.debug.print("tx: {}, lx: {}, ly: {}\n", .{tx, lx, ly});
         }
     }
 
@@ -742,13 +753,16 @@ pub const text_buffer = struct {
         const nline_ptr = try gpa.create(scroll_line);
         nline_ptr.* = try scroll_line.init(self.width, gpa);
         try self.scrollback.insert(gpa, self.cursorY+1, nline_ptr);
+
         if(self.cursorY == self.bottomIndex) try self.scroll(1, gpa);
+
         self.cursorY += 1;
         if(self.bottomIndex < self.cursorY) {
             self.bottomIndex = self.cursorY;
-            self.bottomOffset = 1;
+            self.bottomOffset = self.logicalToTerminal(self.bottomIndex);
         }
-        self.cursorX = 0;
+        self.cursorX = @intCast(self.scrollback.items[self.cursorY].characters.items.len);
+        std.debug.print("ScreenY: {} Logical Y: {}\n", .{self.getScreenCursorY(), self.cursorY});
     }
 
     /// Converts screen coordinates into logical coordinates based on the current content of the screen

@@ -20,15 +20,15 @@ pub const c0_controls = enum (u8) {
 /// Sequences that can follow ESC if the byte is in the range 0x80 to 0x9F. Usually only need to use the CSI code (usually represented by [)
 /// Other sequences are rarely implemented. More info here: https://en.wikipedia.org/wiki/ANSI_escape_code#Fe_Escape_sequences
 pub const fe_escape_sequences = enum (u8) {
-    SS2 = 0x8E, //Single shift two (^[N)
-    SS3 = 0x8F, //Single shift three (^[0)
-    DCS = 0x90, //Device control string (^[P)
-    CSI = 0x9B, //Control Sequence Introducer -> starts most useful sequences, terminated by a byte in the range 0x40 through 0x7E (^[[)
-    ST  = 0x9C, //String terminator (^[\)
-    OSC = 0x9D, //Operating System Command (^[])
-    SOS = 0x98, //Start of String (^[X)
-    PM  = 0x9E, //Privacy Message (^[^)
-    APC = 0x9F  //Application Program Command (^[_)
+    SS2 = 0x4E, //Single shift two (^[N)
+    SS3 = 0x4F, //Single shift three (^[0)
+    DCS = 0x50, //Device control string (^[P)
+    CSI = 0x5B, //Control Sequence Introducer -> starts most useful sequences, terminated by a byte in the range 0x40 through 0x7E (^[[)
+    ST  = 0x5C, //String terminator (^[\)
+    OSC = 0x5D, //Operating System Command (^[])
+    SOS = 0x58, //Start of String (^[X)
+    PM  = 0x5E, //Privacy Message (^[^)
+    APC = 0x5F  //Application Program Command (^[_)
 };
 
 const parser_state = enum (u4) {
@@ -61,12 +61,13 @@ pub const ansi_parser = struct {
                 defer args.deinit(gpa);
 
                 for(self.bytes[0..@intCast(n)]) |b| {
+                    std.debug.print("{x} ", .{b});
                     if(b != 0) {
                         if(self.state == parser_state.NORMAL) {
                             switch(b) {
                                 @intFromEnum(c0_controls.BS)  => {_=try self.text_buf.deleteText(gpa);},
                                 @intFromEnum(c0_controls.HT)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), self.text_buf.getScreenCursorX() + 4, gpa);},
-                                @intFromEnum(c0_controls.LF)  => {_=try self.text_buf.createNewLine(gpa);},
+                                @intFromEnum(c0_controls.LF)  => {try self.text_buf.createNewLine(gpa);},
                                 @intFromEnum(c0_controls.VT)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY() + 4, self.text_buf.getScreenCursorX(), gpa);},
                                 @intFromEnum(c0_controls.FF)  => {try self.text_buf.clearScreen();},
                                 @intFromEnum(c0_controls.CR)  => {try self.text_buf.screenToLogical(self.text_buf.getScreenCursorY(), 0, gpa);},
@@ -76,7 +77,7 @@ pub const ansi_parser = struct {
                         }
                         else if(self.state == parser_state.ESCAPE) {
                             switch (b) {
-                                @intFromEnum(fe_escape_sequences.CSI) => {self.state = parser_state.ESCAPE_CSI;},
+                                @intFromEnum(fe_escape_sequences.CSI) => {self.state = parser_state.ESCAPE_CSI; args.clearRetainingCapacity();},
                                 else => {
                                     std.debug.print("Unsupported Code: {c}\n", .{b});
                                     // const error_msg = " Unsupported Code " ++ b;
@@ -105,6 +106,7 @@ pub const ansi_parser = struct {
                                     'H' => {
                                         if(args.items.len == 0) {
                                             try self.text_buf.screenToLogical(0, 0, gpa);
+                                            args.clearRetainingCapacity();
                                         }
                                         if(args.items.len >= 2) {
                                             try self.text_buf.screenToLogical(args.items[args.items.len-2], args.items[args.items.len-1], gpa);
@@ -183,34 +185,49 @@ pub const ansi_parser = struct {
                                     //========================= ERASE FUNCTIONS ======================
 
                                     'J' => {
+                                        //ESC[J/ESC[0J: Erase from cursor until end of screen
                                         if(args.items.len == 0 or args.items[args.items.len-1] == 0) {
                                             try self.text_buf.eraseText(.{.x=self.text_buf.getScreenCursorX(), .y=self.text_buf.getScreenCursorY()}, .{.x=self.text_buf.width-1, .y=self.text_buf.height-1});
+                                            std.debug.print("ESC[J\n", .{});
                                         }
+                                        //ESC[1J: erase from cursor to beginning of screen
                                         else if(args.items[args.items.len-1] == 1) {
                                             try self.text_buf.eraseText(.{.x=0, .y=0}, .{.x=self.text_buf.getScreenCursorX(), .y=self.text_buf.getScreenCursorY()}, );
+                                            std.debug.print("ESC[1J\n", .{});
                                         }
+                                        //ESC[2J: erase entire screen
                                         else if(args.items[args.items.len-1] == 2) {
                                             try self.text_buf.clearScreen();
+                                            std.debug.print("ESC[2J\n", .{});
                                         }
+                                        //ESC[3J: erase saved lines
                                         else if(args.items[args.items.len-1] == 3) {
                                             try self.text_buf.clearScrollback(gpa);
+                                            std.debug.print("ESC[3J\n", .{});
                                         }
                                         args.clearRetainingCapacity();
                                     },
                                     'K' => {
+                                        //ESC[K/ESC[0K: erase from cursor to end of line
                                         if(args.items.len == 0 or args.items[args.items.len-1] == 0) {
                                             try self.text_buf.eraseText(.{.x=self.text_buf.getScreenCursorX(), .y=self.text_buf.getScreenCursorY()}, .{.x=self.text_buf.width-1, .y=self.text_buf.getScreenCursorY()});
+                                            std.debug.print("ESC[K\n", .{});
                                         }
+                                        //ESC[1K: erase start line to cursor
                                         else if(args.items[args.items.len-1] == 1) {
                                             try self.text_buf.eraseText(.{.x=0, .y=self.text_buf.getScreenCursorY()}, .{.x=self.text_buf.getScreenCursorX(), .y=self.text_buf.getScreenCursorY()}, );
+                                            std.debug.print("ESC[1K\n", .{});
                                         }
+                                        //ESC[2K: erase entire line
                                         else if(args.items[args.items.len-1] == 2) {
                                             try self.text_buf.eraseText(.{.x=0, .y=self.text_buf.getScreenCursorY()}, .{.x=self.text_buf.width-1, .y=self.text_buf.getScreenCursorY()}, );
+                                            std.debug.print("ESC[2K\n", .{});
                                         }
                                     },
 
                                     else => {}
                                 }
+                                self.state = parser_state.NORMAL;
                             }
                         }
                     }
