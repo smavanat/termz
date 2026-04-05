@@ -391,7 +391,10 @@ pub const text_buffer = struct {
         }
 
         //If we are scrolling beyond the boundaries of the screen, just rebuild it
-        if(@abs(spaces) >= self.height) try self.rebuildScreen(false, gpa);
+        if(@abs(spaces) >= self.height) {
+            self.bottomIndex = @max(0, @min(self.scrollback.items.len, self.bottomIndex + @as(u32, @intCast(spaces))));
+            try self.rebuildScreen(false, gpa);
+        }
 
         //Get the current scrollback line
         var sline = self.scrollback.items[self.bottomIndex];
@@ -714,14 +717,18 @@ pub const text_buffer = struct {
         //Current logical line being copied
         var sline_ptr = self.scrollback.items[sline_index];
 
-        while(sline_index >= 0 and tline_index > 0) {
+        while(sline_index >= 0 and tline_index >= 0) {
             //Get the number of lines this logical line occupies
             const num_lines = self.logicalToTerminal(sline_index);
 
+            // How many of this line's rows actually fit on screen given remaining space
+            const visibleRows = @min(num_lines, @as(usize, @intCast(tline_index + 1)));
+            // Which wrapped row to start from (skip the ones that are off the top)
+            const startRow = num_lines - visibleRows;
+
             //Copy the chars over
-            for(0..num_lines) |i| {
-                if(tline_index - (num_lines - i+1) < 0) continue;
-                tline_ptr = self.screen.get(@intCast(tline_index - (num_lines - i+1)));
+            for(startRow..num_lines) |i| {
+                tline_ptr = self.screen.get(@intCast(tline_index - (num_lines - i-1)));
 
                 for(i * self.width..@min((i+1)*self.width, sline_ptr.characters.items.len)) |x| {
                     tline_ptr.characters.items[x - (i * self.width)].char = sline_ptr.characters.items[x].char;
@@ -762,7 +769,6 @@ pub const text_buffer = struct {
             self.bottomOffset = self.logicalToTerminal(self.bottomIndex);
         }
         self.cursorX = @intCast(self.scrollback.items[self.cursorY].characters.items.len);
-        std.debug.print("ScreenY: {} Logical Y: {}\n", .{self.getScreenCursorY(), self.cursorY});
     }
 
     /// Converts screen coordinates into logical coordinates based on the current content of the screen

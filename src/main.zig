@@ -15,6 +15,9 @@ const freetype = imports.termz_c_externals.freetype;
 
 const termz_c = imports.termz_c;
 
+const screen_width: u32 = 800;
+const screen_height: u32 = 600;
+
 var gw: ?*glfw.GLFWwindow = null;
 var tRenderer: tr.renderer = undefined;
 var text_buf: *tb.text_buffer = undefined;
@@ -37,7 +40,7 @@ fn framebufferSizeCallback(window: ?*glfw.GLFWwindow, width: i32, height: i32) c
     if(glad.glad_glViewport) |glViewport|{
         glViewport(0, 0, width, height);
         var proj: m.mat4 = undefined;
-        m.ortho(0.0, @floatFromInt(width), @floatFromInt(height), 0.0, -1.0, 1.0, &proj);
+        m.ortho(0.0, @max(20.0, @as(f32, @floatFromInt(width))), @max(10, @as(f32, @floatFromInt(height))), 0.0, -1.0, 1.0, &proj);
         tRenderer.projection = proj;
 
         const cell_width: u32 = @max(1, @as(u32, @intCast(width))/atls.?.*.cell_w);
@@ -77,7 +80,7 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     };
 
     //Initialising the window
-    window.* = glfw.glfwCreateWindow(800, 600, "termz", null, null);
+    window.* = glfw.glfwCreateWindow(screen_width, screen_height, "termz", null, null);
     if(window.* == null) {
         std.debug.print("Failed to create a GLFW window", .{});
         glfw.glfwTerminate();
@@ -110,7 +113,7 @@ fn init(window: *?*glfw.GLFWwindow) bool {
         return false;
     }
 
-    _ = freetype.FT_Set_Pixel_Sizes(face, 0, 24); //Setting the pixel font size we would like to get from the face
+    _ = freetype.FT_Set_Pixel_Sizes(face, 0, 20); //Setting the pixel font size we would like to get from the face
 
     //Initialising the text renderer
     tRenderer = tr.renderer.init(gpa.allocator(), face, &atls) catch return false;
@@ -119,12 +122,13 @@ fn init(window: *?*glfw.GLFWwindow) bool {
     pts = gpa.allocator().create(pty.PTY) catch return false;
     pts.* = pty.PTY.init();
     if(!pts.pt_pair()) return false;
-    if(!pts.set_term_size(@intCast(800/atls.?.*.cell_w), @intCast(600/atls.?.*.cell_h), 800, 600)) return false;
+    if(!pts.set_term_size(@intCast(screen_width/atls.?.*.cell_w), @intCast(screen_height/atls.?.*.cell_h), screen_width, 600)) return false;
     if(!pts.spawn()) return false;
 
     //Setting up the text buffer
     text_buf = gpa.allocator().create(tb.text_buffer) catch return false;
-    text_buf.* = tb.text_buffer.init(800/atls.?.*.cell_w, 600/atls.?.*.cell_h, gpa.allocator()) catch return false;
+    text_buf.* = tb.text_buffer.init(screen_width/atls.?.*.cell_w, screen_height/atls.?.*.cell_h, gpa.allocator()) catch return false;
+    std.debug.print("Width: {}, Height: {}\n", .{text_buf.width, text_buf.height});
 
     //Loading the ansi parser:
     ansi_p = gpa.allocator().create(ap.ansi_parser) catch return false;
