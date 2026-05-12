@@ -1,5 +1,5 @@
 # Introduction
-This is a work in progress toy implementation of a terminal emulator. I am using it as a learning project to improve my understanding of terminals, working with system calls, and working with Zig. This project is currently only for Linux, and only works with the ```dash``` shell. I plan to expand the functionality in the future
+This is a work in progress toy implementation of a terminal emulator. I am using it as a learning project to improve my understanding of terminals, working with system calls, and working with Zig. This project is currently only for Linux, and only works with the ```bash``` shell. I plan to expand the functionality in the future
 ## Building and Running
 This project requires both Zig 0.15.1 or later (for the source code) and CMake (for the C libraries) to be installed and on the system PATH.  
 This project can be built by running ```zig build```. The ```build.zig``` file handles building with CMake automatically.
