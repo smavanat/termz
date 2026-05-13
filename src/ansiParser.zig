@@ -97,7 +97,7 @@ pub const ansi_parser = struct {
                                 @intFromEnum(escape_sequences.CSI) => {self.state = parser_state.ESCAPE_CSI; args.clearRetainingCapacity();},
                                 else => {
                                     std.debug.print("Unsupported Code: {c}\n", .{b});
-                                    return;
+                                    self.state = parser_state.NORMAL;
                                 }
                             }
                         }
@@ -119,8 +119,6 @@ pub const ansi_parser = struct {
                             if(0x40 <= b and b <= 0x7E) {
                                 switch(b) {
                                     // ===================== CURSOR CONTROLS ==================
-                                    // TODO: Implement ESC[6n, ESC 7, ESC 8, ESC[s, ESC[u
-
                                     //ESC[H: Move cursor to (0,0)
                                     //ESC[{line};{column}H: Move cursor to line, column
                                     'H' => {
@@ -256,6 +254,65 @@ pub const ansi_parser = struct {
                                         }
                                     },
 
+                                    //========================= COLOUR/GRAPHICS MODES ================================
+                                    'm' => {
+                                        //TODO: FIX THIS IS WRONG
+
+                                        //========== STYLE MODES ===========
+                                        if(args.items.len == 1) {
+                                            switch(args.items[0]) {
+                                                //SET CODES
+
+                                                //ESC[1m: Set bold mode
+                                                1 => {},
+                                                //ESC[2m: Set dim/faint mode
+                                                2 => {},
+                                                //ESC[3m: Set italic mode
+                                                3 => {},
+                                                //ESC[4m: Set underline mode
+                                                4 => {},
+                                                //ESC[5m: Set blinking mode
+                                                5 => {},
+                                                //ESC[7m: Set inverse/reverse mode
+                                                7 => {},
+                                                //ESC[8m: Set hidden/invisible mode
+                                                8 => {},
+                                                //ESC[9m: Set strikethrough mode
+                                                9 => {},
+
+                                                //RESET CODES
+
+                                                //ESC[0m: Reset all styles (modes and colours)
+                                                0 => {
+                                                    self.text_buf.currentBackgroundColour = self.text_buf.backgroundColour;
+                                                    self.text_buf.currentForegroundColour = self.text_buf.foregroundColour;
+                                                },
+                                                //ESC[22m: Reset bold mode/Reset dim/faint mode
+                                                22 => {},
+                                                //ESC[23m: Reset italic mode
+                                                23 => {},
+                                                //ESC[24m: Reset underline mode
+                                                24 => {},
+                                                //ESC[25m: Reset blinking mode
+                                                25 => {},
+                                                //ESC[27m: Reset inverse/reverse mode
+                                                27 => {},
+                                                //ESC[28m: Reset hidden/invisible mode
+                                                28 => {},
+                                                //ESC[29m: Reset strikethrough mode
+                                                29 => {},
+
+                                                else =>{}
+                                            }
+                                        }
+                                        //============= XTERM-256 COLOUR MODES =============
+                                        else if(args.items.len == 3) {
+                                            const cl: tb.colour = c_256(@intCast(args.items[2]));
+                                            if(args.items[0] == 38 and args.items[1] == 5) self.text_buf.currentForegroundColour = cl;
+                                            if(args.items[0] == 48 and args.items[1] == 5) self.text_buf.currentBackgroundColour = cl;
+                                        }
+                                    },
+
                                     else => {}
                                 }
                                 self.state = parser_state.NORMAL;
@@ -282,5 +339,21 @@ pub const ansi_parser = struct {
     //Should be used to do a test run of the instructions from the pty to find any codes we are not familiar with
     fn test_parse(self: *ansi_parser) bool {
         _=self;
+    }
+
+    fn c_256(index: u8) tb.colour {
+        if(index < 16) return tb.basic_colours[index];
+
+        if(index < 232) {
+            const r: u8 = (index - 16) / 36;
+            const g: u8 = (r % 36) / 6;
+            const b: u8 = g % 6;
+
+            return .{r, g, b};
+        }
+        else {
+            const c:u8 = 8 + 10 * (index - 232);
+            return .{c, c, c};
+        }
     }
 };

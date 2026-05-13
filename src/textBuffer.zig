@@ -4,6 +4,26 @@ const ca = imports.termz_core.ca;
 const mu = imports.termz_core.mu;
 const pty = imports.termz_core.pty;
 
+pub const colour = [3]u8;
+pub const basic_colours: [16]colour = .{
+    .{46,52,54},    //Black
+    .{204,0,0},     //Red
+    .{78,158,6},    //Green
+    .{196,160,0},   //Yellow
+    .{52,101,164},  //Blue
+    .{117,80,123},  //Magenta
+    .{6,152,154},   //Cyan
+    .{211,215,207}, //White
+    .{85,87,83},    //Bright Black
+    .{239,41,41},   //Bright Red
+    .{138,226,52},  //Bright Green
+    .{252,233,79},  //Bright Yellow
+    .{114,159,207}, //Bright Blue
+    .{173,127,168}, //Bright Magenta
+    .{52,226,226},  //Bright Cyan
+    .{238,238,236}  //Bright White
+};
+
 /// Style flags for a character
 pub const Style = enum(u4) { BOLD, ITALIC, UNDERLINE, NUM_STYLES };
 
@@ -25,17 +45,17 @@ pub const TrailFlag = enum(u2) {
 ///      a bool[] representing the style flag of the cell
 ///      a TrailFlag representing the type of the cell
 pub const character_cell = struct {
-    backgroundColour: ?*mu.vec4,
-    foregroundColour: ?*mu.vec4,
+    backgroundColour: colour,
+    foregroundColour: colour,
     char: u8,
     style: [@intFromEnum(Style.NUM_STYLES)]bool,
     trailFlag: TrailFlag,
 
     pub fn init(c: u8) character_cell {
-        return character_cell{ .char = c, .style = .{false, false, false}, .backgroundColour = null, .foregroundColour = null, .trailFlag = TrailFlag.NORMAL };
+        return character_cell{ .char = c, .style = .{false, false, false}, .backgroundColour = .{0,0,0}, .foregroundColour = .{0,0,0}, .trailFlag = TrailFlag.NORMAL };
     }
 
-    pub fn initWithColour(c: u8, fc: *mu.vec4, bc: *mu.vec4) character_cell {
+    pub fn initWithColour(c: u8, fc: colour, bc: colour) character_cell {
         return character_cell{ .char = c, .style = .{false, false, false}, .backgroundColour = bc, .foregroundColour = fc, .trailFlag = TrailFlag.NORMAL };
     }
 
@@ -48,8 +68,8 @@ pub const character_cell = struct {
     }
 
     pub fn erase(self: *character_cell) void {
-        self.backgroundColour = null;
-        self.foregroundColour = null;
+        self.backgroundColour = .{0,0,0};
+        self.foregroundColour = .{0,0,0};
         self.char = 0;
         self.style = .{false, false, false};
         self.trailFlag = TrailFlag.NORMAL;
@@ -86,8 +106,8 @@ const terminal_line = struct {
         for(0..self.characters.items.len) |i| {
             self.characters.items[i].char = 0; //Setting the char to be a non-printable character by default
             self.characters.items[i].style = .{false, false, false};
-            self.characters.items[i].backgroundColour = null;
-            self.characters.items[i].foregroundColour = null;
+            self.characters.items[i].backgroundColour = .{0,0,0};
+            self.characters.items[i].foregroundColour = .{0,0,0};
             self.characters.items[i].trailFlag = TrailFlag.NORMAL;
         }
     }
@@ -130,9 +150,9 @@ const scroll_line = struct {
     /// Overwrites an element in this scroll line
     /// If the position given is far beyond the end of the line, inserts empty cells between the
     /// current end of the line and the overwritten character
-    pub fn overwrite(self: *scroll_line, pos: u32, ch: u8, gpa: std.mem.Allocator) !void {
+    pub fn overwrite(self: *scroll_line, pos: u32, ch: u8, bg: colour, fg: colour, gpa: std.mem.Allocator) !void {
         if(pos >= self.characters.items.len) {
-            try self.insert(pos, character_cell.init(ch), gpa);
+            try self.insert(pos, character_cell.initWithColour(ch, bg, fg), gpa);
         }
         else {
             self.characters.items[pos].char = ch;
@@ -200,10 +220,10 @@ pub const text_buffer = struct {
     savedCursorY: u32,
     bottomIndex: u32, //Index of the bottom line on the screen in the scrollback
     bottomOffset: u32, //How many on-screen lines the bottom line currently takes up (could be less than its full size if its paritally on the screen)
-    backgroundColour: *mu.vec4, //Default background colour of the screen
-    foregroundColour: *mu.vec4, //Default foreground colour of the screen
-    currentBackgroundColour: ?*mu.vec4, //Background colour set by the pty
-    currentForegroundColour: ?*mu.vec4, //Foreground colour set by the pty
+    backgroundColour: colour, //Default background colour of the screen
+    foregroundColour: colour, //Default foreground colour of the screen
+    currentBackgroundColour: colour, //Background colour set by the pty
+    currentForegroundColour: colour, //Foreground colour set by the pty
     scrollback: *std.ArrayList(*scroll_line),
     screen: *ca.CircularArray(*terminal_line, null),
 
@@ -229,19 +249,10 @@ pub const text_buffer = struct {
             try s_ptr.addToFront(init_tline, gpa);
         }
 
-        const bc_ptr = try gpa.create(mu.vec4);
-        bc_ptr.* = mu.vec4.init(0.0, 0.0, 0.0, 1.0);
-
-        const fc_ptr = try gpa.create(mu.vec4);
-        fc_ptr.* = mu.vec4.init(1.0, 1.0, 1.0, 1.0);
-
-        return text_buffer{ .width = w, .height = h, .cursorX = 0, .cursorY = 0, .savedCursorX = 0, .savedCursorY = 0, .bottomIndex = 0, .bottomOffset = 1, .backgroundColour = bc_ptr, .foregroundColour = fc_ptr, .currentBackgroundColour=null, .currentForegroundColour=null, .scrollback = sb_ptr, .screen = s_ptr };
+        return text_buffer{ .width = w, .height = h, .cursorX = 0, .cursorY = 0, .savedCursorX = 0, .savedCursorY = 0, .bottomIndex = 0, .bottomOffset = 1, .backgroundColour = basic_colours[0], .foregroundColour = basic_colours[7], .currentBackgroundColour = basic_colours[0], .currentForegroundColour = basic_colours[7], .scrollback = sb_ptr, .screen = s_ptr };
     }
 
     pub fn deinit(self: *text_buffer, gpa: std.mem.Allocator) void {
-        gpa.destroy(self.backgroundColour);
-        gpa.destroy(self.foregroundColour);
-
         for(0..self.screen.size) |i| {
             const line = self.screen.get(@intCast(i));
             line.deinit(gpa);
@@ -566,7 +577,7 @@ pub const text_buffer = struct {
         const sline: *scroll_line = self.scrollback.items[self.cursorY];
         var tline: *terminal_line = self.screen.get(self.getScreenCursorY());
 
-        const ch_ptr = character_cell.init(text);
+        const ch_ptr = character_cell.initWithColour(text, self.currentForegroundColour, self.currentBackgroundColour);
         var line_y = self.getScreenCursorY();
         try sline.insert(self.cursorX, ch_ptr, gpa);
         try tline.characters.insert(gpa, self.getScreenCursorX(), ch_ptr);
@@ -598,7 +609,7 @@ pub const text_buffer = struct {
         const tline: *terminal_line = self.screen.get(self.getScreenCursorY());
 
         //Overwrite the char in both
-        try sline.overwrite(self.cursorX, text, gpa);
+        try sline.overwrite(self.cursorX, text, self.backgroundColour, self.foregroundColour, gpa);
         tline.characters.items[self.getScreenCursorX()].char = text;
 
         //Move the character

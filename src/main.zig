@@ -96,9 +96,19 @@ fn init(window: *?*glfw.GLFWwindow) bool {
         return false;
     }
 
+    //Getting the exe path
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_path = std.fs.selfExeDirPath(&buf) catch return false;
+
+    //Getting the data folder relative to the exe path
+    const font_path = std.fs.path.joinZ(gpa.allocator(), &.{
+        exe_path, "../data/fonts/DejaVuSansMono.ttf"
+    }) catch return false;
+    defer gpa.allocator().free(font_path);
+
     //Loading the font as a FreeType 'face'
     var face: freetype.FT_Face = undefined;
-    if(freetype.FT_New_Face(ft, "data/fonts/DejaVuSansMono.ttf", 0, @ptrCast(&face)) != 0) {
+    if(freetype.FT_New_Face(ft, font_path, 0, @ptrCast(&face)) != 0) {
         std.debug.print("ERROR::FREETYPE: Failed to load font\n", .{});
         return false;
     }
@@ -149,7 +159,7 @@ pub fn main() !void {
             ansi_p.parse(pts, gpa.allocator()) catch break;
 
             //Setting the background colour to be black
-            glad.glClearColor(text_buf.backgroundColour.x, text_buf.backgroundColour.y, text_buf.backgroundColour.z, text_buf.backgroundColour.w);
+            glad.glClearColor(@as(f32,@floatFromInt(text_buf.backgroundColour[0]))/256.0, @as(f32,@floatFromInt(text_buf.backgroundColour[1]))/256.0, @as(f32,@floatFromInt(text_buf.backgroundColour[2]))/256.0, 1.0);
             glad.glClear(glad.GL_COLOR_BUFFER_BIT);
 
             tRenderer.renderTextBuffer(text_buf, atls.?);

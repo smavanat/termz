@@ -119,10 +119,7 @@ pub const PTY = struct {
 
     /// Writes a message to the pty and returns the number of bytes written
     pub fn write(self: *PTY, msg: []const u8) usize {
-        // return std.os.linux.write(self.master, msg.ptr, msg.len);
-        std.debug.print("PTY.write: master={}, len={}, msg={s}\n", .{self.master, msg.len, msg});
         const n = std.os.linux.write(self.master, msg.ptr, msg.len);
-        std.debug.print("PTY.write: wrote {} bytes\n", .{n});
         return n;
     }
 };

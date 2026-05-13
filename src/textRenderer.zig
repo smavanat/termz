@@ -119,7 +119,23 @@ pub const renderer = struct {
         glad.glBindBuffer(glad.GL_ARRAY_BUFFER, 0);
         glad.glBindVertexArray(0);
 
-        const fg_shader = try s.loadShader("data/shaders/glyph.frag", "data/shaders/glyph.vert", allocator);
+        //Getting the exe path
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        const exe_path = try std.fs.selfExeDirPath(&buf);
+
+        //Getting the shader data relative to the exe path
+        const frag_path = try std.fs.path.joinZ(allocator, &.{
+            exe_path, "../data/shaders/glyph.frag"
+        });
+        defer allocator.free(frag_path);
+
+        const vert_path = try std.fs.path.joinZ(allocator, &.{
+            exe_path, "../data/shaders/glyph.vert"
+        });
+        defer allocator.free(vert_path);
+
+        //Loading the shaders
+        const fg_shader = try s.loadShader(frag_path, vert_path, allocator);
         glad.glUseProgram(fg_shader);
         const loc = glad.glGetUniformLocation(fg_shader, "text");
         glad.glUniform1i(loc, 0);
@@ -171,8 +187,14 @@ pub const renderer = struct {
                 const fg = if(is_cursor) tex_buf.backgroundColour else tex_buf.foregroundColour;
                 const bg = if(is_cursor) tex_buf.foregroundColour else tex_buf.backgroundColour;
 
-                glad.glUniform4f(glad.glGetUniformLocation(@intCast(self.shader), "bgColor"), bg.x, bg.y, bg.z, bg.w);
-                glad.glUniform4f(glad.glGetUniformLocation(@intCast(self.shader), "textColor"), fg.x, fg.y, fg.z, fg.w);
+                glad.glUniform4f(glad.glGetUniformLocation(@intCast(self.shader), "bgColor"),
+                    @as(f32, @floatFromInt(bg[0])) / 256.0,
+                    @as(f32, @floatFromInt(bg[1])) / 256.0,
+                    @as(f32, @floatFromInt(bg[2])) / 256.0, 1.0);
+                glad.glUniform4f(glad.glGetUniformLocation(@intCast(self.shader), "textColor"),
+                    @as(f32, @floatFromInt(fg[0])) / 256.0,
+                    @as(f32, @floatFromInt(fg[1])) / 256.0,
+                    @as(f32, @floatFromInt(fg[2])) / 256.0, 1.0);
 
                 //Update vbo for each character
                 const uv = at.uvs[ch-32];
