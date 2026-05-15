@@ -173,7 +173,8 @@ pub const renderer = struct {
                 if(j >= tex_buf.width) continue; //If beyond the screen width, skip
 
                 //Get the current char
-                var ch :u8 = line.characters.items[j].char;
+                const ch_cell = line.characters.items[j];
+                var ch :u8 = ch_cell.char;
                 //If at the cursor's pos and the current char is a control character, set it to be space to make sure the cursor is printed
                 if(is_cursor and (ch < 32 or ch > 126)) ch = 32;
                 if (ch < 32 or ch > 126) continue; //If the current char is a control character, skip rendering it
@@ -184,8 +185,11 @@ pub const renderer = struct {
                 const h: f32 = @as(f32, @floatFromInt(at.cell_h));
 
                 //If we are at the cursor's position, swap the foreground and background characters
-                const fg = if(is_cursor) tex_buf.currentBackgroundColour else tex_buf.currentForegroundColour;
-                const bg = if(is_cursor) tex_buf.currentForegroundColour else tex_buf.currentBackgroundColour;
+                const black = [3]u8{0,0,0};
+                const c_fg = if(std.mem.eql(u8, &ch_cell.foregroundColour, &black)) tex_buf.foregroundColour else ch_cell.foregroundColour;
+                const c_bg = if(std.mem.eql(u8, &ch_cell.backgroundColour, &black)) tex_buf.backgroundColour else ch_cell.backgroundColour;
+                const fg = if(is_cursor) c_bg else c_fg;
+                const bg = if(is_cursor) c_fg else c_bg;
 
                 glad.glUniform4f(glad.glGetUniformLocation(@intCast(self.shader), "bgColor"),
                     @as(f32, @floatFromInt(bg[0])) / 256.0,

@@ -609,8 +609,10 @@ pub const text_buffer = struct {
         const tline: *terminal_line = self.screen.get(self.getScreenCursorY());
 
         //Overwrite the char in both
-        try sline.overwrite(self.cursorX, text, self.backgroundColour, self.foregroundColour, gpa);
+        try sline.overwrite(self.cursorX, text, self.currentBackgroundColour, self.currentForegroundColour, gpa);
         tline.characters.items[self.getScreenCursorX()].char = text;
+        tline.characters.items[self.getScreenCursorX()].backgroundColour = self.currentBackgroundColour;
+        tline.characters.items[self.getScreenCursorX()].foregroundColour = self.currentForegroundColour;
 
         //Move the character
         try self.moveCursorX(1, false, gpa);

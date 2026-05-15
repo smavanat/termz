@@ -267,6 +267,7 @@ pub const ansi_parser = struct {
                                         var sp_fg: u8 = 0;
 
                                         for(args.items[0..args.items.len]) |i| {
+                                            std.debug.print("{}\n", .{i});
                                             if(sp_bg == 5) {
                                                 self.text_buf.backgroundColour = c_256(@intCast(i));
                                                 sp_bg = 0;
@@ -329,80 +330,80 @@ pub const ansi_parser = struct {
                                                 //========= COLOUR CODES ==========
 
                                                 //ESC[30m: Set foreground to Black
-                                                30 => {self.text_buf.currentForegroundColour = tb.basic_colours[0];},
+                                                30 => {self.text_buf.currentForegroundColour = tb.basic_colours[0]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[31m: Set foreground to Red
-                                                31 => {self.text_buf.currentForegroundColour = tb.basic_colours[1];},
+                                                31 => {self.text_buf.currentForegroundColour = tb.basic_colours[1]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[32m: Set foreground to Green
-                                                32 => {self.text_buf.currentForegroundColour = tb.basic_colours[2];},
+                                                32 => {self.text_buf.currentForegroundColour = tb.basic_colours[2]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[33m: Set foreground to Yellow
-                                                33 => {self.text_buf.currentForegroundColour = tb.basic_colours[3];},
+                                                33 => {self.text_buf.currentForegroundColour = tb.basic_colours[3]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[34m: Set foreground to Blue
-                                                34 => {self.text_buf.currentForegroundColour = tb.basic_colours[4];},
+                                                34 => {self.text_buf.currentForegroundColour = tb.basic_colours[4]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[35m: Set foreground to Magenta
-                                                35 => {self.text_buf.currentForegroundColour = tb.basic_colours[5];},
+                                                35 => {self.text_buf.currentForegroundColour = tb.basic_colours[5]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[36m: Set foreground to Cyan
-                                                36 => {self.text_buf.currentForegroundColour = tb.basic_colours[6];},
+                                                36 => {self.text_buf.currentForegroundColour = tb.basic_colours[6]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[37m: Set foreground to White
-                                                37 => {self.text_buf.currentForegroundColour = tb.basic_colours[7];},
+                                                37 => {self.text_buf.currentForegroundColour = tb.basic_colours[7]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[38m: Set foreground using xterm-256 or RGB
-                                                38 => {sp_fg = 1;},
+                                                38 => {sp_fg = 1; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[39m: Set foreground to default
-                                                39 => {self.text_buf.currentForegroundColour = self.text_buf.foregroundColour;},
+                                                39 => {self.text_buf.currentForegroundColour = self.text_buf.foregroundColour; std.debug.print("Colour Changed\n", .{});},
 
                                                 //ESC[40m: Set background to Black
-                                                40 => {self.text_buf.currentBackgroundColour = tb.basic_colours[0];},
+                                                40 => {self.text_buf.currentBackgroundColour = tb.basic_colours[0]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[41m: Set background to Red
-                                                41 => {self.text_buf.currentBackgroundColour = tb.basic_colours[1];},
+                                                41 => {self.text_buf.currentBackgroundColour = tb.basic_colours[1]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[42m: Set background to Green
-                                                42 => {self.text_buf.currentBackgroundColour = tb.basic_colours[2];},
+                                                42 => {self.text_buf.currentBackgroundColour = tb.basic_colours[2]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[43m: Set background to Yellow
-                                                43 => {self.text_buf.currentBackgroundColour = tb.basic_colours[3];},
+                                                43 => {self.text_buf.currentBackgroundColour = tb.basic_colours[3]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[44m: Set background to Blue
-                                                44 => {self.text_buf.currentBackgroundColour = tb.basic_colours[4];},
+                                                44 => {self.text_buf.currentBackgroundColour = tb.basic_colours[4]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[45m: Set background to Magenta
-                                                45 => {self.text_buf.currentBackgroundColour = tb.basic_colours[5];},
+                                                45 => {self.text_buf.currentBackgroundColour = tb.basic_colours[5]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[46m: Set background to Cyan
-                                                46 => {self.text_buf.currentBackgroundColour = tb.basic_colours[6];},
+                                                46 => {self.text_buf.currentBackgroundColour = tb.basic_colours[6]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[47m: Set background to White
-                                                47 => {self.text_buf.currentBackgroundColour = tb.basic_colours[7];},
+                                                47 => {self.text_buf.currentBackgroundColour = tb.basic_colours[7]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[48m: Set background using xterm-256 or RGB
                                                 48 => {sp_bg = 1;},
                                                 //ESC[49m: Set background to default
                                                 49 => {self.text_buf.currentBackgroundColour = self.text_buf.backgroundColour;},
 
                                                 //ESC[90m: Set foreground to Bright Black
-                                                90 => {self.text_buf.currentForegroundColour = tb.basic_colours[8];},
+                                                90 => {self.text_buf.currentForegroundColour = tb.basic_colours[8]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[91m: Set foreground to Bright Red
-                                                91 => {self.text_buf.currentForegroundColour = tb.basic_colours[9];},
+                                                91 => {self.text_buf.currentForegroundColour = tb.basic_colours[9]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[92m: Set foreground to Bright Green
-                                                92 => {self.text_buf.currentForegroundColour = tb.basic_colours[10];},
+                                                92 => {self.text_buf.currentForegroundColour = tb.basic_colours[10]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[93m: Set foreground to Bright Yellow
-                                                93 => {self.text_buf.currentForegroundColour = tb.basic_colours[11];},
+                                                93 => {self.text_buf.currentForegroundColour = tb.basic_colours[11]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[94m: Set foreground to Bright Blue
-                                                94 => {self.text_buf.currentForegroundColour = tb.basic_colours[12];},
+                                                94 => {self.text_buf.currentForegroundColour = tb.basic_colours[12]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[95m: Set foreground to Bright Magenta
-                                                95 => {self.text_buf.currentForegroundColour = tb.basic_colours[13];},
+                                                95 => {self.text_buf.currentForegroundColour = tb.basic_colours[13]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[96m: Set foreground to Bright Cyan
-                                                96 => {self.text_buf.currentForegroundColour = tb.basic_colours[14];},
+                                                96 => {self.text_buf.currentForegroundColour = tb.basic_colours[14]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[97m: Set foreground to Bright White
-                                                97 => {self.text_buf.currentForegroundColour = tb.basic_colours[15];},
+                                                97 => {self.text_buf.currentForegroundColour = tb.basic_colours[15]; std.debug.print("Colour Changed\n", .{});},
 
                                                 //ESC[100m: Set background to Bright Black
-                                                100 => {self.text_buf.currentBackgroundColour = tb.basic_colours[8];},
+                                                100 => {self.text_buf.currentBackgroundColour = tb.basic_colours[8]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[101m: Set background to Bright Red
-                                                101 => {self.text_buf.currentBackgroundColour = tb.basic_colours[9];},
+                                                101 => {self.text_buf.currentBackgroundColour = tb.basic_colours[9]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[102m: Set background to Bright Green
-                                                102 => {self.text_buf.currentBackgroundColour = tb.basic_colours[10];},
+                                                102 => {self.text_buf.currentBackgroundColour = tb.basic_colours[10]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[103m: Set background to Bright Yellow
-                                                103 => {self.text_buf.currentBackgroundColour = tb.basic_colours[11];},
+                                                103 => {self.text_buf.currentBackgroundColour = tb.basic_colours[11]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[104m: Set background to Bright Blue
-                                                104 => {self.text_buf.currentBackgroundColour = tb.basic_colours[12];},
+                                                104 => {self.text_buf.currentBackgroundColour = tb.basic_colours[12]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[105m: Set background to Bright Magenta
-                                                105 => {self.text_buf.currentBackgroundColour = tb.basic_colours[13];},
+                                                105 => {self.text_buf.currentBackgroundColour = tb.basic_colours[13]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[106m: Set background to Bright Cyan
-                                                106 => {self.text_buf.currentBackgroundColour = tb.basic_colours[14];},
+                                                106 => {self.text_buf.currentBackgroundColour = tb.basic_colours[14]; std.debug.print("Colour Changed\n", .{});},
                                                 //ESC[107m: Set background to Bright White
-                                                107 => {self.text_buf.currentBackgroundColour = tb.basic_colours[15];},
+                                                107 => {self.text_buf.currentBackgroundColour = tb.basic_colours[15]; std.debug.print("Colour Changed\n", .{});},
 
                                                 else =>{}
                                             }
